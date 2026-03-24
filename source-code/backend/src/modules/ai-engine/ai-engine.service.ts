@@ -4,14 +4,22 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Project, ProjectDocument } from '../projects/schemas/project.schema';
+import {
+  ALL_PALETTE_HEX_COLORS,
+  buildPaletteAndShapesPromptBlock,
+} from './constants/asset-palettes';
+import { LOGIC_ARRAY_EXAMPLE } from './constants/logic-prompt-example';
 import { GameConfig, GameConfigSchema } from './schemas/game-config.schema';
+import { normalizeHexOrRandom } from './utils/hex-color.util';
 
 const SYSTEM_INSTRUCTION = `AI phải tuân thủ nghiêm ngặt các quy tắc:
 - **No Markdown:** Trả về JSON string thô để \`JSON.parse\` không bị lỗi.
-- **Vibe Studio Colors:** - Primary: \`#E6E6FA\` (Lavender)
-    - Background: \`#F3E5F5\`
+- **Màu sắc (Asset Module):** Hệ thống hỗ trợ mọi mã HEX hợp lệ (#RRGGBB). Nếu người dùng KHÔNG chỉ định màu trong prompt, hãy chọn ngẫu nhiên một palette mẫu (Lavender / Mint / Peach / Sky) và dùng màu từ palette đó cho theme. Nếu người dùng CÓ yêu cầu màu riêng (tên màu hoặc mã HEX), hãy ưu tiên màu của họ.
+- **source_color (bắt buộc):** Luôn trả về trường top-level \`source_color\` với giá trị đúng một trong hai chuỗi: \`prompt\` (màu đến từ yêu cầu người dùng) hoặc \`palette_fallback\` (màu từ palette mẫu vì prompt không chỉ màu).
+- **Hình dạng entity:** Mỗi phần tử trong \`entities\` phải có \`shapeType\` là một trong: Square, Circle, Triangle (không dùng giá trị khác).
 - **Logic:** Luôn phải có 1 entity \`type: "player"\`.
-- **Logic Format:** Trường \`logic\` luôn phải là một mảng (Array), kể cả khi chỉ có 1 rule.`;
+- **Logic Format (bắt buộc):** Trường \`logic\` là một mảng (Array). Tuyệt đối KHÔNG trả về \`logic\` là mảng các chuỗi văn bản mô tả thuần (ví dụ \`["rule 1", "rule 2"]\` là SAI). KHÔNG dùng mô tả văn bản thay cho cấu trúc object.
+- **Logic phần tử:** Mỗi phần tử trong \`logic\` PHẢI là một JSON Object với đúng các khóa: \`id\` (string), \`description\` (string), \`trigger\` (string), \`action\` (string).`;
 
 function extractLikelyJson(text: string): string {
   const start = text.indexOf('{');
@@ -20,30 +28,68 @@ function extractLikelyJson(text: string): string {
   return text.slice(start, end + 1).trim();
 }
 
+/**
+ * Sau JSON.parse, trước Zod: nếu logic là mảng string → ép thành object chuẩn.
+ */
+function preprocessLogicArray(
+  parsed: Record<string, unknown>,
+  logger: Logger,
+): void {
+  if (parsed.logic == null) return;
+  if (!Array.isArray(parsed.logic)) return;
+
+  const arr = parsed.logic as unknown[];
+  const allStrings =
+    arr.length > 0 && arr.every((x) => typeof x === 'string');
+  if (allStrings) {
+    parsed.logic = (arr as string[]).map((description, index) => ({
+      id: String(index),
+      description,
+      trigger: 'auto',
+      action: 'manual',
+    }));
+    logger.warn(
+      'AI.generateGameConfig: logic was string[]; coerced to object[] (trigger=auto, action=manual)',
+    );
+    return;
+  }
+
+  const hasString = arr.some((x) => typeof x === 'string');
+  if (hasString) {
+    parsed.logic = arr.map((item, index) => {
+      if (typeof item === 'string') {
+        return {
+          id: String(index),
+          description: item,
+          trigger: 'auto',
+          action: 'manual',
+        };
+      }
+      return item;
+    });
+    logger.warn(
+      'AI.generateGameConfig: logic array contained strings; coerced those entries to objects',
+    );
+  }
+}
+
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
-function normalizeGameConfig(input: GameConfig): GameConfig {
-  const normalized: GameConfig = {
+function clampEntityPositions(input: GameConfig): GameConfig {
+  return {
     ...input,
-    theme: {
-      ...input.theme,
-      primary: '#E6E6FA',
-      background: '#F3E5F5',
-      vibe: input.theme?.vibe ?? 'lavender_pastel',
-    },
-    entities: input.entities.map((e) => {
-      const pos = e.position
+    entities: input.entities.map((e) => ({
+      ...e,
+      position: e.position
         ? {
             x: clamp(e.position.x, 0, 100),
             y: clamp(e.position.y, 0, 100),
           }
-        : undefined;
-      return { ...e, position: pos };
-    }),
+        : undefined,
+    })),
   };
-  return normalized;
 }
 
 @Injectable()
@@ -52,26 +98,62 @@ export class AiEngineService {
 
   constructor(
     private readonly config: ConfigService,
-    @InjectModel(Project.name) private readonly projectModel: Model<ProjectDocument>,
+    @InjectModel(Project.name)
+    private readonly projectModel: Model<ProjectDocument>,
   ) {}
 
   private getModel() {
     const apiKey = this.config.getOrThrow<string>('GEMINI_API_KEY');
     const genAI = new GoogleGenerativeAI(apiKey);
-    return genAI.getGenerativeModel(
-      {
-        model: 'gemini-3-flash-preview',
-        systemInstruction: SYSTEM_INSTRUCTION,
-        // Preview models chạy trên v1beta.
-        apiVersion: 'v1beta',
-      } as any,
-    );
+    return genAI.getGenerativeModel({
+      model: 'gemini-3-flash-preview',
+      systemInstruction: SYSTEM_INSTRUCTION,
+      apiVersion: 'v1beta',
+    } as any);
   }
 
   /**
-   * In danh sách model khả dụng ra console (debug khi 404).
-   * Gọi qua GET /api/ai/models hoặc từ đâu đó khi cần.
+   * Ép theme.primary/background/accent và entity.colorHex về HEX hợp lệ;
+   * nếu không hợp lệ -> mã ngẫu nhiên từ bộ palette chuẩn.
    */
+  private normalizeThemeAndEntityHexColors(config: GameConfig): GameConfig {
+    const pool = [...ALL_PALETTE_HEX_COLORS];
+    const theme = { ...config.theme } as Record<string, unknown>;
+
+    for (const key of ['primary', 'background', 'accent']) {
+      const v = theme[key];
+      if (typeof v === 'string') {
+        const { hex, wasReplaced } = normalizeHexOrRandom(v, pool);
+        theme[key] = hex;
+        if (wasReplaced) {
+          this.logger.warn(
+            `AI.generateGameConfig: invalid HEX theme.${key}="${v}" -> ${hex} (palette pool)`,
+          );
+        }
+      }
+    }
+
+    const entities = config.entities.map((e) => {
+      const ex = { ...e } as Record<string, unknown>;
+      if (typeof ex['colorHex'] === 'string') {
+        const { hex, wasReplaced } = normalizeHexOrRandom(ex['colorHex'] as string, pool);
+        ex['colorHex'] = hex;
+        if (wasReplaced) {
+          this.logger.warn(
+            `AI.generateGameConfig: invalid HEX entity id=${String(e.id)} colorHex -> ${hex}`,
+          );
+        }
+      }
+      return ex;
+    });
+
+    return {
+      ...config,
+      theme: theme as GameConfig['theme'],
+      entities: entities as GameConfig['entities'],
+    };
+  }
+
   async listModels(): Promise<string[]> {
     const apiKey = this.config.getOrThrow<string>('GEMINI_API_KEY');
     const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
@@ -79,7 +161,10 @@ export class AiEngineService {
 
     try {
       const res = await fetch(url);
-      const json = (await res.json()) as { models?: { name: string }[]; error?: { message: string } };
+      const json = (await res.json()) as {
+        models?: { name: string }[];
+        error?: { message: string };
+      };
 
       if (!res.ok) {
         this.logger.error(
@@ -100,13 +185,18 @@ export class AiEngineService {
     }
   }
 
-  async generateGameConfig(prompt: string, projectId?: string): Promise<GameConfig> {
+  async generateGameConfig(
+    prompt: string,
+    projectId?: string,
+  ): Promise<GameConfig> {
     this.logger.log('AI.generateGameConfig: start');
     this.logger.log(`AI.generateGameConfig: prompt length=${prompt.length}`);
 
     let previousRawPrompt: string | undefined;
     if (projectId) {
-      this.logger.log(`AI.generateGameConfig: loading context for projectId=${projectId}`);
+      this.logger.log(
+        `AI.generateGameConfig: loading context for projectId=${projectId}`,
+      );
       const proj = await this.projectModel
         .findById(new Types.ObjectId(projectId))
         .select({ rawPrompt: 1 })
@@ -123,17 +213,28 @@ export class AiEngineService {
       previousRawPrompt ? `RAW_PROMPT_CU: ${previousRawPrompt}` : undefined,
       `PROMPT_MOI: ${prompt}`,
       '',
+      buildPaletteAndShapesPromptBlock(),
+      '',
       'Nhắc lại yêu cầu bắt buộc:',
-      '- theme.primary phải là #E6E6FA, theme.background phải là #F3E5F5, vibe = lavender_pastel.',
+      '- Có trường top-level "source_color": "prompt" hoặc "palette_fallback" (đúng chữ, lowercase).',
+      '- Nếu prompt KHÔNG nói gì về màu -> dùng palette ngẫu nhiên và đặt source_color=palette_fallback.',
+      '- Nếu prompt CÓ yêu cầu màu (tên hoặc HEX) -> ưu tiên màu đó và đặt source_color=prompt.',
+      '- theme.primary, theme.background là chuỗi HEX #RRGGBB; có thể thêm theme.accent.',
+      '- vibe gợi ý: lavender_pastel hoặc phù hợp palette đã chọn.',
+      '- Mỗi entity bắt buộc có "shapeType": "Square" | "Circle" | "Triangle".',
       '- entities phải có ít nhất 1 entity type="player".',
-      '- gameConfig theo cấu trúc: theme, entities, logic.',
-      '- logic PHẢI là Array. Nếu chỉ có 1 rule vẫn phải trả về dạng [ { ... } ].',
+      '- gameConfig có: source_color, theme, entities, logic (logic là Array các OBJECT, không phải array string).',
+      '',
+      'VÍ DỤ đúng — trường "logic" (bắt chước cấu trúc, có thể đổi nội dung):',
+      LOGIC_ARRAY_EXAMPLE,
     ]
       .filter(Boolean)
       .join('\n');
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      this.logger.log(`AI.generateGameConfig: calling Gemini (attempt ${attempt + 1}/2)`);
+      this.logger.log(
+        `AI.generateGameConfig: calling Gemini (attempt ${attempt + 1}/2)`,
+      );
       let result;
       try {
         result = await model.generateContent(userText);
@@ -146,10 +247,14 @@ export class AiEngineService {
         throw error;
       }
       const rawText = result.response.text();
-      this.logger.log(`AI.generateGameConfig: Gemini raw response length=${rawText.length}`);
+      this.logger.log(
+        `AI.generateGameConfig: Gemini raw response length=${rawText.length}`,
+      );
 
       const jsonText = extractLikelyJson(rawText);
-      this.logger.log(`AI.generateGameConfig: extracted JSON length=${jsonText.length}`);
+      this.logger.log(
+        `AI.generateGameConfig: extracted JSON length=${jsonText.length}`,
+      );
 
       try {
         const parsed = JSON.parse(jsonText) as Record<string, unknown>;
@@ -158,30 +263,38 @@ export class AiEngineService {
           `AI.generateGameConfig: parsed JSON = ${JSON.stringify(parsed, null, 2)}`,
         );
 
-        // Một số phản hồi AI trả logic là object đơn lẻ -> tự bọc thành array.
         if (
           parsed.logic != null &&
           !Array.isArray(parsed.logic) &&
           typeof parsed.logic === 'object'
         ) {
           parsed.logic = [parsed.logic];
-          this.logger.warn('AI.generateGameConfig: logic object detected, wrapped into array');
+          this.logger.warn(
+            'AI.generateGameConfig: logic object detected, wrapped into array',
+          );
         }
+
+        preprocessLogicArray(parsed, this.logger);
 
         const validated = GameConfigSchema.parse(parsed);
         this.logger.log('AI.generateGameConfig: Zod validate OK');
+        this.logger.log(
+          `AI.generateGameConfig: source_color (from AI) = ${validated.source_color}`,
+        );
 
-        const normalized = normalizeGameConfig(validated);
-        this.logger.log('AI.generateGameConfig: normalized OK');
+        let out = clampEntityPositions(validated);
+        out = this.normalizeThemeAndEntityHexColors(out);
+        this.logger.log(
+          `AI.generateGameConfig: source_color (after pipeline) = ${out.source_color}`,
+        );
 
-        return normalized;
+        return out;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         this.logger.error(
           `AI.generateGameConfig: parse/validate failed (attempt ${attempt + 1}/2): ${message}`,
         );
 
-        // Theo tài liệu: retry 1 lần nếu JSON parse thất bại.
         if (attempt === 0) {
           this.logger.log('AI.generateGameConfig: retrying once...');
           continue;
@@ -190,7 +303,6 @@ export class AiEngineService {
       }
     }
 
-    // Unreachable
     throw new Error('AI.generateGameConfig: unexpected failure');
   }
 }

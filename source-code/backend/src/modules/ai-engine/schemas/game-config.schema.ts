@@ -5,24 +5,35 @@ const PositionSchema = z.object({
   y: z.number(),
 });
 
+/** Đồng bộ với docs/02-backend/asset-module (Square, Circle, Triangle). */
+const ShapeTypeSchema = z.enum(['Square', 'Circle', 'Triangle']);
+
 const EntitySchema = z
   .object({
     id: z.string(),
     type: z.string(),
+    shapeType: ShapeTypeSchema,
+    colorHex: z.string().optional(),
     position: PositionSchema.optional(),
     settings: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();
 
+/** Mỗi rule: object có đủ id + description + trigger + action (không phải chuỗi thuần). */
 const LogicRuleSchema = z
   .object({
+    id: z.string(),
+    description: z.string(),
     trigger: z.string(),
     action: z.string(),
   })
   .passthrough();
 
+const SourceColorSchema = z.enum(['prompt', 'palette_fallback']);
+
 export const GameConfigSchema = z
   .object({
+    source_color: SourceColorSchema,
     theme: z
       .object({
         primary: z.string(),
@@ -39,7 +50,7 @@ export const GameConfigSchema = z
     if (!hasPlayer) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'GameConfig must contain an entity with type: \"player\"',
+        message: 'GameConfig must contain an entity with type: "player"',
         path: ['entities'],
       });
     }
