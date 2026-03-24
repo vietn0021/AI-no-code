@@ -189,8 +189,9 @@ export class AiEngineService {
     prompt: string,
     projectId?: string,
   ): Promise<GameConfig> {
-    this.logger.log('AI.generateGameConfig: start');
-    this.logger.log(`AI.generateGameConfig: prompt length=${prompt.length}`);
+    this.logger.log('[AI_LOG] generateGameConfig: start');
+    this.logger.log(`[AI_LOG] Prompt: ${prompt}`);
+    this.logger.log(`[AI_LOG] Prompt length=${prompt.length}`);
 
     let previousRawPrompt: string | undefined;
     if (projectId) {
@@ -247,6 +248,10 @@ export class AiEngineService {
         throw error;
       }
       const rawText = result.response.text();
+      const usage = (result.response as unknown as { usageMetadata?: unknown })
+        ?.usageMetadata;
+      this.logger.log(`[AI_LOG] Response Raw: ${rawText}`);
+      this.logger.log(`[AI_LOG] Tokens: ${JSON.stringify(usage ?? null)}`);
       this.logger.log(
         `AI.generateGameConfig: Gemini raw response length=${rawText.length}`,
       );

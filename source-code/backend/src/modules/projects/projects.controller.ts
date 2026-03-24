@@ -1,4 +1,4 @@
-﻿import {
+import {
   Body,
   Controller,
   Get,
@@ -8,6 +8,7 @@
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { GenerateProjectDto } from './dto/generate-project.dto';
@@ -17,43 +18,44 @@ import { ProjectOwnerGuard } from './guards/project-owner.guard';
 import { ProjectsService } from './projects.service';
 
 @ApiTags('projects')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('projects')
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create project' })
-  create(@Body() dto: CreateProjectDto) {
-    return this.projectsService.create(dto);
+  create(
+    @Body() dto: CreateProjectDto,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.projectsService.create(dto, user.sub);
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard, ProjectOwnerGuard)
-  @ApiBearerAuth()
+  @UseGuards(ProjectOwnerGuard)
   @ApiOperation({ summary: 'Get project by id' })
   findOne(@Param('id') id: string) {
     return this.projectsService.findOne(id);
   }
 
   @Get(':id/versions')
-  @UseGuards(JwtAuthGuard, ProjectOwnerGuard)
-  @ApiBearerAuth()
+  @UseGuards(ProjectOwnerGuard)
   @ApiOperation({ summary: 'List project version snapshots' })
   listVersions(@Param('id') id: string) {
     return this.projectsService.listVersions(id);
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, ProjectOwnerGuard)
-  @ApiBearerAuth()
+  @UseGuards(ProjectOwnerGuard)
   @ApiOperation({ summary: 'Update project (snapshot if gameConfig changes)' })
   update(@Param('id') id: string, @Body() dto: UpdateProjectDto) {
     return this.projectsService.update(id, dto);
   }
 
   @Post(':id/generate')
-  @UseGuards(JwtAuthGuard, ProjectOwnerGuard)
-  @ApiBearerAuth()
+  @UseGuards(ProjectOwnerGuard)
   @ApiOperation({
     summary: 'AI generate gameConfig, save snapshot, update project',
   })
@@ -62,8 +64,7 @@ export class ProjectsController {
   }
 
   @Post(':id/rollback')
-  @UseGuards(JwtAuthGuard, ProjectOwnerGuard)
-  @ApiBearerAuth()
+  @UseGuards(ProjectOwnerGuard)
   @ApiOperation({ summary: 'Rollback project to a previous snapshot' })
   rollback(@Param('id') id: string, @Body() dto: RollbackProjectDto) {
     return this.projectsService.rollback(id, dto);

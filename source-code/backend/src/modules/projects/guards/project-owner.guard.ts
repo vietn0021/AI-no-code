@@ -1,4 +1,4 @@
-﻿import {
+import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
@@ -13,11 +13,11 @@ export class ProjectOwnerGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<{
       params: { id: string };
-      user?: { userId: string };
+      user?: { userId?: string; sub?: string };
     }>();
 
     const projectId = request.params?.id;
-    const userId = request.user?.userId;
+    const userId = request.user?.sub ?? request.user?.userId;
 
     if (!projectId || !userId) {
       throw new ForbiddenException('Missing project/user context');

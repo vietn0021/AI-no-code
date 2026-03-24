@@ -47,10 +47,10 @@ export class ProjectsService {
     return new Types.ObjectId(id);
   }
 
-  async create(dto: CreateProjectDto) {
+  async create(dto: CreateProjectDto, userId: string) {
     return this.projectsRepository.create({
       name: dto.name,
-      userId: new Types.ObjectId(dto.userId),
+      userId: new Types.ObjectId(userId),
       description: dto.description,
       rawPrompt: dto.rawPrompt,
       gameConfig: dto.gameConfig,

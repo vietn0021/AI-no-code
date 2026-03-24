@@ -1,9 +1,12 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+﻿import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GenerateGameConfigDto } from './dto/generate-game-config.dto';
 import { AiEngineService } from './ai-engine.service';
 
 @ApiTags('ai')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('ai')
 export class AiEngineController {
   constructor(private readonly aiEngineService: AiEngineService) {}
