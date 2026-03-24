@@ -1,0 +1,139 @@
+# Project Module
+
+## 1) Mongoose Schema: `Project`
+
+Muc tieu cua `Project` la luu trang thai hien tai (latest) cua game ma user dang lam viec.
+
+### Truong de xuat
+
+- `name: string`  
+  - Required, trim.
+- `description?: string`  
+  - Optional, mo ta ngan ve project.
+- `gameConfig: Record<string, unknown>`  
+  - Cau hinh game hien tai (JSON linh hoat, nen dung `Schema.Types.Mixed`).
+- `currentVersion: number`  
+  - So phien ban hien tai cua project. Mac dinh `1`.
+- `userId: ObjectId`  
+  - Ref toi `User`, required, index de lay danh sach project theo user nhanh.
+
+### Goi y schema (Nest + Mongoose)
+
+- Dung `@Schema({ timestamps: true, collection: 'projects' })`.
+- Dung `@Prop({ type: mongoose.Schema.Types.Mixed })` cho `gameConfig`.
+- Dung index phu hop:
+  - `{ userId: 1, createdAt: -1 }` cho man hinh dashboard.
+
+---
+
+## 2) Version Schema: `ProjectVersion` (Snapshot)
+
+`ProjectVersion` dung de luu lich su truoc moi lan cap nhat project, giup rollback an toan.
+
+### Truong de xuat
+
+- `projectId: ObjectId`  
+  - Ref toi `Project`, required, index.
+- `version: number`  
+  - So phien ban snapshot (thuong bang `Project.currentVersion` truoc khi update).
+- `snapshot: Record<string, unknown>`  
+  - Ban sao `gameConfig` tai thoi diem luu (dung `Schema.Types.Mixed`).
+- `changeSource: 'ai' | 'manual' | 'rollback'`  
+  - Nguon gay thay doi (de debug/audit).
+- `createdBy?: ObjectId`  
+  - User thuc hien thao tac (neu co context auth).
+
+### Goi y schema
+
+- Dung `@Schema({ timestamps: true, collection: 'project_versions' })`.
+- Dung `@Prop({ type: mongoose.Schema.Types.Mixed, required: true })` cho `snapshot`.
+- Dung index:
+  - `{ projectId: 1, version: -1 }` de lay lich su nhanh.
+
+---
+
+## 3) Logic nghiep vu (AI generate + versioning)
+
+Khi AI generate xong game config moi, he thong can thuc hien theo thu tu:
+
+1. Tim `Project` hien tai theo `projectId`.
+2. Tao ban ghi `ProjectVersion` chua **ban cu** truoc khi ghi de:
+   - `version = project.currentVersion`
+   - `snapshot = project.gameConfig`
+   - `changeSource = 'ai'`
+3. Cap nhat `Project`:
+   - `gameConfig = aiOutput`
+   - `currentVersion = currentVersion + 1`
+   - (tuy chon) cap nhat `description/rawPrompt` neu can.
+4. Tra ve `Project` moi nhat cho frontend.
+
+### Luu y quan trong
+
+- Nen dung **transaction** (Mongo session) de dam bao:
+  - tao `ProjectVersion` va update `Project` thanh cong cung nhau.
+- Neu transaction fail:
+  - rollback toan bo, khong duoc de tinh trang mat dong bo version.
+
+---
+
+## 4) API can thiet
+
+Duoi day la bo endpoint toi thieu cho `Project Module`.
+
+### 4.1 Create Project
+
+- `POST /api/projects`
+- Body:
+  - `name`, `description?`, `gameConfig?`, `userId`
+- Ket qua:
+  - Tao project moi voi `currentVersion = 1`.
+
+### 4.2 Get Project
+
+- `GET /api/projects/:id`
+- Ket qua:
+  - Tra ve chi tiet project hien tai (latest state).
+
+### 4.3 Update Project (manual update)
+
+- `PATCH /api/projects/:id`
+- Body:
+  - truong can cap nhat (`name`, `description`, `gameConfig`, ...)
+- Logic:
+  - Neu `gameConfig` thay doi, luu snapshot vao `ProjectVersion` truoc roi moi update.
+
+### 4.4 Update by AI Generate
+
+- `POST /api/projects/:id/generate`
+- Body:
+  - `prompt`
+- Logic:
+  - Goi AI engine -> nhan `newGameConfig`.
+  - Luu snapshot cu vao `ProjectVersion`.
+  - Update `Project` voi cau hinh moi + tang `currentVersion`.
+
+### 4.5 Rollback Project
+
+- `POST /api/projects/:id/rollback`
+- Body:
+  - `targetVersion` hoac `projectVersionId`
+- Logic:
+  - Lay snapshot can quay lai.
+  - Luu state hien tai thanh 1 `ProjectVersion` moi (de co the undo rollback neu can).
+  - Gan `Project.gameConfig = snapshot`, cap nhat `currentVersion`.
+
+### 4.6 Get Version History
+
+- `GET /api/projects/:id/versions`
+- Ket qua:
+  - Danh sach cac snapshot, sap xep moi nhat truoc.
+
+---
+
+## 5) Tong ket flow chuan
+
+- `Project` = trang thai hien tai.
+- `ProjectVersion` = lich su.
+- Moi lan update quan trong (dac biet AI generate) deu:
+  - save snapshot cu -> update ban moi.
+- Co endpoint rollback de quay ve ban on dinh bat ky.
