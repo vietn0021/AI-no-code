@@ -12,7 +12,8 @@ import { Project, ProjectDocument } from './schemas/project.schema';
 @Injectable()
 export class ProjectsRepository {
   constructor(
-    @InjectModel(Project.name) private readonly projectModel: Model<ProjectDocument>,
+    @InjectModel(Project.name)
+    private readonly projectModel: Model<ProjectDocument>,
     @InjectModel(ProjectVersion.name)
     private readonly projectVersionModel: Model<ProjectVersionDocument>,
   ) {}
@@ -22,10 +23,7 @@ export class ProjectsRepository {
   }
 
   findByUserId(userId: Types.ObjectId): Promise<ProjectDocument[]> {
-    return this.projectModel
-      .find({ userId })
-      .sort({ updatedAt: -1 })
-      .exec();
+    return this.projectModel.find({ userId }).sort({ updatedAt: -1 }).exec();
   }
 
   create(
@@ -66,11 +64,18 @@ export class ProjectsRepository {
     return doc.save({ session });
   }
 
-  listVersions(projectId: string | Types.ObjectId): Promise<ProjectVersionDocument[]> {
-    return this.projectVersionModel.find({ projectId }).sort({ version: -1 }).exec();
+  listVersions(
+    projectId: string | Types.ObjectId,
+  ): Promise<ProjectVersionDocument[]> {
+    return this.projectVersionModel
+      .find({ projectId })
+      .sort({ version: -1 })
+      .exec();
   }
 
-  findVersionById(versionDocId: string): Promise<ProjectVersionDocument | null> {
+  findVersionById(
+    versionDocId: string,
+  ): Promise<ProjectVersionDocument | null> {
     return this.projectVersionModel.findById(versionDocId).exec();
   }
 
