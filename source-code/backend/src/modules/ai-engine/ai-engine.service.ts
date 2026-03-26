@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Project, ProjectDocument } from '../projects/schemas/project.schema';
@@ -95,12 +96,31 @@ function clampEntityPositions(input: GameConfig): GameConfig {
 @Injectable()
 export class AiEngineService {
   private readonly logger = new Logger(AiEngineService.name);
+  private readonly useGroq: boolean;
+  private readonly groqModel: string;
+  private readonly groqClient: Groq | null;
 
   constructor(
     private readonly config: ConfigService,
     @InjectModel(Project.name)
     private readonly projectModel: Model<ProjectDocument>,
-  ) {}
+  ) {
+    const groqKey = this.config.get<string>('GROQ_API_KEY')?.trim();
+    this.useGroq = Boolean(groqKey);
+    this.groqModel =
+      this.config.get<string>('GROQ_MODEL')?.trim() ||
+      'llama-3.3-70b-versatile';
+    this.groqClient = groqKey ? new Groq({ apiKey: groqKey }) : null;
+    if (this.useGroq) {
+      this.logger.log(
+        `AiEngineService: using Groq (model=${this.groqModel}) for generateGameConfig`,
+      );
+    } else {
+      this.logger.log(
+        'AiEngineService: GROQ_API_KEY not set; using Gemini for generateGameConfig',
+      );
+    }
+  }
 
   private getModel() {
     const apiKey = this.config.getOrThrow<string>('GEMINI_API_KEY');
@@ -110,6 +130,35 @@ export class AiEngineService {
       systemInstruction: SYSTEM_INSTRUCTION,
       apiVersion: 'v1beta',
     } as any);
+  }
+
+  private async callGroq(fullPrompt: string): Promise<string> {
+    if (!this.groqClient) {
+      throw new Error('callGroq: Groq client is not initialized');
+    }
+    const completion = await this.groqClient.chat.completions.create({
+      model: this.groqModel,
+      messages: [
+        { role: 'system', content: SYSTEM_INSTRUCTION },
+        { role: 'user', content: fullPrompt },
+      ],
+    });
+    const content = completion.choices[0]?.message?.content;
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      const parts = content as unknown[];
+      return parts
+        .map((part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          typeof (part as { text?: unknown }).text === 'string'
+            ? (part as { text: string }).text
+            : '',
+        )
+        .join('');
+    }
+    return '';
   }
 
   /**
@@ -206,7 +255,7 @@ export class AiEngineService {
       previousRawPrompt = proj?.rawPrompt;
     }
 
-    const model = this.getModel();
+    const geminiModel = this.useGroq ? null : this.getModel();
 
     const userText = [
       'Bạn là AI tạo gameConfig cho AI No-code Studio.',
@@ -233,28 +282,49 @@ export class AiEngineService {
       .join('\n');
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      this.logger.log(
-        `AI.generateGameConfig: calling Gemini (attempt ${attempt + 1}/2)`,
-      );
-      let result;
-      try {
-        result = await model.generateContent(userText);
-      } catch (error) {
-        const err = error as Error;
-        this.logger.error(
-          `AI.generateGameConfig: generateContent failed (attempt ${attempt + 1}/2): ${err.message}`,
-          err.stack,
+      let rawText: string;
+      if (this.useGroq) {
+        this.logger.log(
+          `AI.generateGameConfig: calling Groq (attempt ${attempt + 1}/2)`,
         );
-        throw error;
+        try {
+          rawText = await this.callGroq(userText);
+        } catch (error) {
+          const err = error as Error;
+          this.logger.error(
+            `AI.generateGameConfig: callGroq failed (attempt ${attempt + 1}/2): ${err.message}`,
+            err.stack,
+          );
+          throw error;
+        }
+        this.logger.log(`[AI_LOG] Response Raw: ${rawText}`);
+        this.logger.log(
+          `AI.generateGameConfig: Groq raw response length=${rawText.length}`,
+        );
+      } else {
+        this.logger.log(
+          `AI.generateGameConfig: calling Gemini (attempt ${attempt + 1}/2)`,
+        );
+        let result;
+        try {
+          result = await geminiModel!.generateContent(userText);
+        } catch (error) {
+          const err = error as Error;
+          this.logger.error(
+            `AI.generateGameConfig: generateContent failed (attempt ${attempt + 1}/2): ${err.message}`,
+            err.stack,
+          );
+          throw error;
+        }
+        rawText = result.response.text();
+        const usage = (result.response as unknown as { usageMetadata?: unknown })
+          ?.usageMetadata;
+        this.logger.log(`[AI_LOG] Response Raw: ${rawText}`);
+        this.logger.log(`[AI_LOG] Tokens: ${JSON.stringify(usage ?? null)}`);
+        this.logger.log(
+          `AI.generateGameConfig: Gemini raw response length=${rawText.length}`,
+        );
       }
-      const rawText = result.response.text();
-      const usage = (result.response as unknown as { usageMetadata?: unknown })
-        ?.usageMetadata;
-      this.logger.log(`[AI_LOG] Response Raw: ${rawText}`);
-      this.logger.log(`[AI_LOG] Tokens: ${JSON.stringify(usage ?? null)}`);
-      this.logger.log(
-        `AI.generateGameConfig: Gemini raw response length=${rawText.length}`,
-      );
 
       const jsonText = extractLikelyJson(rawText);
       this.logger.log(

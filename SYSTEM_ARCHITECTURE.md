@@ -9,7 +9,7 @@ Tài liệu này mô tả kiến trúc **full stack** hiện tại: `source-code
 - Framework: NestJS + TypeScript
 - Database: MongoDB + Mongoose
 - Auth: JWT Access Token + Passport (`JwtAuthGuard`, `JwtStrategy`)
-- AI: Gemini (`@google/generative-ai`) + Zod validation (`GameConfigSchema`)
+- AI: **Groq** (`groq-sdk`, tùy chọn) hoặc **Gemini** (`@google/generative-ai`) cho `generateGameConfig`; cùng pipeline Zod (`GameConfigSchema`) + normalize sau khi nhận text
 - API prefix: `/api`
 - Global response envelope: `{ success: true, data: ... }` (`TransformInterceptor`)
 - Swagger UI: **`/api/docs`** (global prefix + `SwaggerModule.setup('docs', …)`)
@@ -50,7 +50,7 @@ Hệ thống đang theo mô hình module-based + layered:
 | `ProjectVersionsModule` | API tạo snapshot trực tiếp                            | `ProjectVersionsController`, `ProjectVersionsService`                              |
 | `AssetsModule`          | Lưu metadata asset                                    | `AssetsController`, `AssetsService`                                                |
 | `PromptsModule`         | Log prompt/response AI                                | `PromptsController`, `PromptsService`                                              |
-| `AiEngineModule`        | Gọi Gemini, parse/normalize/validate game config      | `AiEngineController`, `AiEngineService`                                            |
+| `AiEngineModule`        | Gọi LLM (Groq nếu có `GROQ_API_KEY`, không thì Gemini), parse/normalize/validate game config | `AiEngineController`, `AiEngineService`                                            |
 | `DatabaseModule`        | Kết nối DB + logging + global mongoose JSON transform | `MongooseModule.forRootAsync`, `DatabaseLoggerService`                             |
 
 ### 1.3 Sơ đồ phân tầng (Mermaid)
@@ -116,9 +116,9 @@ flowchart TD
 
 | Method | Path                | Guard | Controller Handler                   |
 | ------ | ------------------- | ----- | ------------------------------------ |
-| POST   | `/project-versions` | None  | `ProjectVersionsController.create()` |
-| POST   | `/assets`           | None  | `AssetsController.create()`          |
-| POST   | `/prompts`          | None  | `PromptsController.create()`         |
+| POST   | `/project-versions` | `JwtAuthGuard` | `ProjectVersionsController.create()` |
+| POST   | `/assets`           | `JwtAuthGuard` | `AssetsController.create()`          |
+| POST   | `/prompts`          | `JwtAuthGuard` | `PromptsController.create()`         |
 
 ---
 
@@ -138,7 +138,7 @@ Luồng chuẩn khi gọi `POST /api/projects/:id/generate`:
 4. `AiEngineService.generateGameConfig(...)`:
    - Build prompt context (`rawPrompt` cũ nếu có).
    - Inject palette/shapes rules vào prompt.
-   - Gọi Gemini `model.generateContent`.
+   - **LLM:** nếu env có `GROQ_API_KEY` → `groq-sdk` `chat.completions` (model `GROQ_MODEL`, mặc định `llama-3.3-70b-versatile`, system = `SYSTEM_INSTRUCTION`); ngược lại → Gemini `generateContent` (cùng nội dung user prompt).
    - Parse JSON text, xử lý logic defensively (object -> array, string[] -> object[]).
    - Validate bằng `GameConfigSchema` (Zod).
    - Normalize positions, HEX colors, log `source_color`.
@@ -159,7 +159,7 @@ sequenceDiagram
   participant OG as ProjectOwnerGuard
   participant PS as ProjectsService
   participant AIS as AiEngineService
-  participant G as Gemini API
+  participant LLM as Groq hoặc Gemini
   participant PR as ProjectsRepository
   participant DB as MongoDB
 
@@ -171,8 +171,8 @@ sequenceDiagram
   OG-->>PC: pass/fail
   PC->>PS: generate(projectId, prompt)
   PS->>AIS: generateGameConfig(prompt, projectId)
-  AIS->>G: generateContent(prompt with system rules)
-  G-->>AIS: JSON text
+  AIS->>LLM: completions / generateContent (theo env)
+  LLM-->>AIS: JSON text
   AIS->>AIS: parse + preprocess + zod + normalize
   AIS-->>PS: newGameConfig
   PS->>PR: insertSnapshot(old config)
@@ -271,7 +271,8 @@ sequenceDiagram
 
 | Hàm                                                      | Vị trí                           | Nhiệm vụ                                                                            |
 | -------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
-| `AiEngineService.generateGameConfig(prompt, projectId?)` | `ai-engine/ai-engine.service.ts` | Orchestrate toàn bộ pipeline gọi Gemini -> parse -> validate -> normalize -> retry. |
+| `AiEngineService.generateGameConfig(prompt, projectId?)` | `ai-engine/ai-engine.service.ts` | Orchestrate pipeline: Groq hoặc Gemini → text → parse → validate → normalize → retry (2 lần). |
+| `AiEngineService.callGroq(fullPrompt)` (private)          | `ai-engine/ai-engine.service.ts` | Gọi Groq Chat Completions; system = `SYSTEM_INSTRUCTION`.                            |
 | `extractLikelyJson(text)`                                | `ai-engine/ai-engine.service.ts` | Trích JSON object từ raw text model trả về.                                         |
 | `preprocessLogicArray(parsed, logger)`                   | `ai-engine/ai-engine.service.ts` | Chuyển `logic` dạng string[] / mixed về object[] phòng vỡ Zod.                      |
 | `normalizeThemeAndEntityHexColors(config)`               | `ai-engine/ai-engine.service.ts` | Validate/fallback HEX từ palette pool cho theme/entity.                             |
@@ -371,8 +372,8 @@ Ngay cả khi model trả sai format:
 ### 7.1 Route & layout
 
 - **Studio:** `/studio/:projectId` → `EditorPage.tsx` (bảo vệ `PrivateRoute`).
-- Layout 3 cột: **AI Chat** (trái, thu/phóng), **Preview** (giữa), **Layers | Assets + Inspector** (phải).
-- File chính: `source-code/frontend/src/pages/studio/EditorPage.tsx`, `components/GameCanvas.tsx`, `components/EditorRightColumn.tsx`, `components/AiChatPanel.tsx`, `components/LayersPanel.tsx`, `components/InspectorPanel.tsx`, `components/AssetsPanel.tsx`.
+- Layout 3 cột: **AI Chat** (trái, thu/phóng), **Preview / Play** (giữa — toggle), **Layers | Assets + Inspector** (phải).
+- File chính: `EditorPage.tsx`, `GameCanvas.tsx`, **`GameRuntime.tsx`** (Phaser Play), `EditorRightColumn.tsx`, `AiChatPanel.tsx`, `LayersPanel.tsx`, `InspectorPanel.tsx`, `AssetsPanel.tsx`.
 
 ### 7.2 `gameConfig` & entity trên client
 
@@ -386,6 +387,15 @@ Ngay cả khi model trả sai format:
 - `GET/ PATCH /api/projects/:id`, `POST .../generate`, `GET .../versions`, `POST .../rollback` — Bearer JWT + owner guard (khớp `projects.controller.ts`).
 - Client: `services/projects.api.ts`, `services/auth.api.ts`.
 
+### 7.4 AI Chat — ngữ cảnh scene
+
+- `AiChatPanel.tsx` đọc `gameConfig` từ `useEditorStore` và gửi lên API một **`contextPrompt`**: JSON scene hiện tại (`gameConfig`) + yêu cầu chỉnh sửa của user + hướng dẫn giữ phần không đổi.
+- UI chat vẫn hiển thị **chỉ prompt gốc** của user (không hiển thị full `contextPrompt`).
+
+### 7.5 Chế độ Play (Phaser)
+
+- Toggle **Preview / Play** trên khung giữa: Preview = `GameCanvas`; Play = `GameRuntime` (Phaser 3 Arcade) đọc `gameConfig` từ store — player điều khiển WASD / mũi tên; tam giác vẽ bằng `Graphics` + hitbox rect.
+
 ---
 
 ## 8) Architectural Notes / Gaps (Thực trạng hiện tại)
@@ -394,8 +404,8 @@ Ngay cả khi model trả sai format:
    - Docs cũ có thể đề cập `username/role`; user hiện tại: `email`, `password`, `fullName` (+ trường reset password trên schema).
 2. **Create Project**
    - `POST /api/projects` **đã** bảo vệ `JwtAuthGuard`; `userId` lấy từ `@CurrentUser() user.sub`, body **không** gửi `userId` (xem `CreateProjectDto`).
-3. **ProjectVersionsModule endpoint public**
-   - `POST /project-versions` chưa có guard; có thể giới hạn internal-only.
+3. **Route nội bộ đã bảo vệ JWT**
+   - `POST /project-versions`, `POST /assets`, `POST /prompts` dùng `JwtAuthGuard` (theo controller hiện tại).
 4. **Refresh token chưa có**
    - Auth hiện chỉ Access Token.
 5. **AI Zod vs sprite thủ công**
@@ -420,7 +430,7 @@ Ngay cả khi model trả sai format:
 - Entry / routes: `source-code/frontend/src/App.tsx`, `routes/AppRoutes.tsx`, `routes/PrivateRoute.tsx`
 - Auth UI: `pages/auth/*`, `contexts/AuthProvider.tsx`
 - Dashboard: `pages/dashboard/*`
-- Studio: `pages/studio/*`, `store/useEditorStore.ts`, `pages/studio/lib/entityView.ts`, `pages/studio/lib/studioSampleAssets.ts`
+- Studio: `pages/studio/*` (gồm `components/GameRuntime.tsx`), `store/useEditorStore.ts`, `pages/studio/lib/entityView.ts`, `pages/studio/lib/studioSampleAssets.ts`
 
 ### Design docs
 

@@ -1,6 +1,6 @@
 # AI No-code Game Studio
 
-Ứng dụng **studio tạo game không cần code**: người dùng đăng ký/đăng nhập, quản lý dự án, chỉnh **game config** (JSON) qua **AI (Gemini)** và **editor trực quan** (preview, layers, asset mẫu, sprite), có **versioning / rollback** phía backend.
+Ứng dụng **studio tạo game không cần code**: người dùng đăng ký/đăng nhập, quản lý dự án, chỉnh **game config** (JSON) qua **AI (Groq hoặc Gemini)** và **editor trực quan** (preview / play Phaser, layers, asset mẫu, sprite), có **versioning / rollback** phía backend.
 
 ---
 
@@ -33,7 +33,9 @@ AI-no-code/
 
 - **Node.js** (LTS khuyến nghị)
 - **MongoDB** (Atlas hoặc local) — URI trong biến môi trường backend
-- **Google Gemini API key** — cho generate game config (`GEMINI_API_KEY`)
+- **AI:** tùy cấu hình `.env` backend:
+  - Nếu có **`GROQ_API_KEY`** → `generateGameConfig` dùng **Groq** (mặc định model `llama-3.3-70b-versatile`, đổi bằng `GROQ_MODEL`).
+  - Nếu không → dùng **Gemini** — cần **`GEMINI_API_KEY`** (và `GET /ai/models` vẫn dùng Gemini).
 
 ---
 
@@ -44,7 +46,7 @@ AI-no-code/
 ```bash
 cd source-code/backend
 cp .env.example .env
-# Chỉnh MONGODB_URI, JWT_SECRET, JWT_EXPIRES_IN; thêm GEMINI_API_KEY vào .env
+# Chỉnh MONGODB_URI, JWT_SECRET, JWT_EXPIRES_IN; thêm GROQ_API_KEY hoặc GEMINI_API_KEY (xem .env.example)
 npm install
 npm run start:dev
 ```
@@ -74,7 +76,8 @@ Xem đầy đủ trong `source-code/backend/.env.example`:
 
 - `PORT`, `MONGODB_URI`, `DB_NAME`
 - `JWT_SECRET`, `JWT_EXPIRES_IN`
-- `GEMINI_API_KEY` (bắt buộc cho AI generate)
+- `GROQ_API_KEY`, `GROQ_MODEL` (tùy chọn — ưu tiên khi có key)
+- `GEMINI_API_KEY` (bắt buộc khi **không** dùng Groq cho generate; cần cho `GET /ai/models`)
 - Tùy chọn reset mật khẩu: `FRONTEND_URL`, `PASSWORD_RESET_EXPIRES_MIN`, `PASSWORD_RESET_LOG_LINK`
 
 ---

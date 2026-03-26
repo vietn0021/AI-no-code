@@ -18,6 +18,7 @@
 - **Frontend Port:** 5173 (Vite Default)
 - **API Prefix:** `/api`
 - **Swagger UI:** `/api/docs`
+- **AI backend:** xem `source-code/backend/.env.example` — `GROQ_API_KEY` (ưu tiên) hoặc `GEMINI_API_KEY`; chi tiết `docs/02-backend/ai-engine-module/readme.md`.
 
 ## 4. Initialization Checklist for AI
 ### Step 1: Backend Setup (NestJS)

@@ -20,22 +20,24 @@ Giao diện đồng bộ tông **Sky Blue + White + Glassmorphism** với Dashbo
 
 - Component: `components/AiChatPanel.tsx`.
 - Thu/phóng header; gọi `POST /api/projects/:projectId/generate` với Bearer token.
+- **Ngữ cảnh scene:** đọc `gameConfig` từ `useEditorStore`, build `contextPrompt` = JSON scene hiện tại + yêu cầu chỉnh sửa + hướng dẫn chỉ đổi phần được hỏi; **payload gửi API** dùng `contextPrompt`. Trong UI, bubble user vẫn hiển thị **prompt gốc** (không hiện full JSON context).
 - Lịch sử tin nhắn + trạng thái loading / lỗi (toast + envelope backend).
 
-### 2.3 Cột giữa — Preview (Game Canvas)
+### 2.3 Cột giữa — Preview / Play
 
-- Khung **aspect-video**, bên trong `GameCanvas.tsx`.
-- Đọc `gameConfig` từ **`useEditorStore`** (`Zustand`).
-- **Entity hình học:** `div` theo `shapeType` (Square / Circle / Triangle), màu `colorHex`, vị trí **%** (tâm), kích thước **px** (`entityView.ts`: `resolveEntityPosition`, `resolveEntitySize`, `resolveEntityColor`).
-- **Entity sprite (ảnh):** khi `type === 'sprite'` và có **`assetUrl`** → render **`<img>`** bên trong wrapper tuyệt đối, **`object-fit: contain`**, không méo; vẫn **kéo bằng pointer** (cùng cơ chế `entity-${id}` + `updateEntity`).
-- **Kéo asset từ sidebar:** `onDragOver` / `onDrop` trên vùng canvas — MIME `application/x-studio-asset`, payload JSON `{ assetUrl, label }` → `addEntity(...)` tại tọa độ thả (%).
+- Header khu vực canvas: toggle **Preview** | **Play** (`EditorPage.tsx`).
+- **Preview:** khung **aspect-video**, `GameCanvas.tsx` — đọc `gameConfig` từ **`useEditorStore`**.
+- **Play:** `GameRuntime.tsx` (Phaser 3 Arcade) — cùng `gameConfig`; entity `type: player` đầu tiên điều khiển WASD / mũi tên; còn lại static va chạm; tam giác vẽ bằng **Graphics** + hitbox hình chữ nhật; vị trí % → pixel như preview.
+- **Entity hình học (Preview):** `div` theo `shapeType` (Square / Circle / Triangle), màu `colorHex`, vị trí **%** (tâm), kích thước **px** (`entityView.ts`).
+- **Entity sprite (ảnh):** `type === 'sprite'` + **`assetUrl`** → **`<img>`**, **`object-fit: contain`**; kéo pointer như entity khác.
+- **Kéo asset từ sidebar:** MIME `application/x-studio-asset` → `addEntity` tại tọa độ thả (%).
 
 ### 2.4 Cột phải — Tabs Layers / Assets + Inspector
 
 - `EditorRightColumn.tsx`:
   - Tab **Layers** → `LayersPanel.tsx`: danh sách entity (đảo thứ tự render), chọn / xóa (confirm), thumbnail sprite nếu có `assetUrl`.
   - Tab **Assets** → `AssetsPanel.tsx`: danh sách mẫu từ `lib/studioSampleAssets.ts` (Player, Enemy, Tree, Coin, … — hiện dùng **SVG data URL** cố định, không phụ thuộc CDN). Mỗi mục `draggable`.
-- **Inspector:** `InspectorPanel.tsx` — vị trí %, kích thước px, palette Asset Module + HEX, xóa entity; hiển thị meta khi chưa chọn (theme scene).
+- **Inspector:** `InspectorPanel.tsx` — vị trí %, kích thước px (commit blur / Enter), color picker + HEX hai chiều, palette Asset Module, nút xóa (Trash + `window.confirm`); meta theme khi chưa chọn entity.
 
 ---
 
@@ -96,6 +98,7 @@ source-code/frontend/src/pages/studio/
   components/
     AiChatPanel.tsx
     GameCanvas.tsx
+    GameRuntime.tsx          # Phaser — chế độ Play
     EditorRightColumn.tsx    # tab Layers | Assets
     LayersPanel.tsx
     AssetsPanel.tsx
@@ -121,5 +124,6 @@ source-code/frontend/src/store/
 | Canvas | Hình học (div) + **sprite (`<img>` + object-contain)** |
 | Assets | Tab Assets, kéo thả vào Preview → `addEntity` |
 | Store | Zustand `useEditorStore` |
-| AI | POST `/api/projects/:id/generate` + Bearer |
+| AI | POST `/api/projects/:id/generate` + Bearer; prompt có context `gameConfig` (payload), UI chỉ hiện text user |
+| Play | Toggle Play → `GameRuntime` (Phaser) |
 | Lưu / tải | GET + PATCH project, đồng bộ `gameConfig` |

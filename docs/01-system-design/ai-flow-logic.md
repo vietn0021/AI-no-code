@@ -1,14 +1,14 @@
-# 01 - AI Generation Flow Logic (Gemini Integrated)
+# 01 - AI Generation Flow Logic (Groq / Gemini)
 
 ## 1. AI Stack & Configuration
-- **Engine:** Google Gemini 1.5 Flash.
-- **Library:** `@google/generative-ai`.
-- **API Key:** Quản lý qua `ConfigService` (biến `GEMINI_API_KEY`).
+- **Provider (runtime):** Nếu có `GROQ_API_KEY` trong env → **Groq** (`groq-sdk`), model mặc định `llama-3.3-70b-versatile` (override bằng `GROQ_MODEL`). Nếu không → **Google Gemini** (`@google/generative-ai`).
+- **Gemini:** `GEMINI_API_KEY` qua `ConfigService`; dùng cho `generateGameConfig` (khi không dùng Groq) và cho **`GET /ai/models`**.
+- **Chung:** Cùng `SYSTEM_INSTRUCTION` + user prompt; output là text → parse JSON → Zod → normalize.
 
 ## 2. Luồng xử lý (Pipeline)
 1. **User Input:** Nhận prompt + `projectId`.
 2. **Context:** Backend truy vấn `rawPrompt` cũ để Gemini biết người dùng đang muốn "sửa" hay "tạo mới".
-3. **AI Call:** Sử dụng `model.generateContent` kèm theo **System Instruction**.
+3. **AI Call:** Groq `chat.completions` (system + user) **hoặc** Gemini `generateContent` kèm **System Instruction** trên model.
 4. **Output Parsing:** - Loại bỏ rác (nếu có) để lấy chuỗi JSON.
    - Sử dụng `zod` để validate cấu trúc `gameConfig`.
 5. **Normalization:** Ép màu về HEX, tọa độ `x,y` về dải 0-100.
@@ -22,7 +22,7 @@ AI phải tuân thủ nghiêm ngặt các quy tắc:
 - **Logic:** Luôn phải có 1 entity `type: "player"`.
 
 ## 4. Xử lý lỗi & Trạng thái
-- **Retry:** Tự động gọi lại Gemini 1 lần nếu JSON parse thất bại.
+- **Retry:** Tự động gọi lại LLM (Groq hoặc Gemini) thêm tối đa 1 lần nếu parse/validate thất bại.
 - **State:** Cập nhật `isProcessing: true` trong Project để Frontend hiển thị hiệu ứng Loading tím pastel.
 
 ## 5. Cấu trúc GameConfig Tiêu chuẩn (Vibe Studio)
