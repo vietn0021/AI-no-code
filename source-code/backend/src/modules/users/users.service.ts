@@ -1,4 +1,4 @@
-﻿import { Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -21,5 +21,40 @@ export class UsersService {
 
   findById(id: string): Promise<UserDocument | null> {
     return this.userModel.findById(id).exec();
+  }
+
+  /** Includes password + reset fields for completing password reset. */
+  findForPasswordReset(email: string): Promise<UserDocument | null> {
+    return this.userModel
+      .findOne({ email: email.toLowerCase().trim() })
+      .select('+password +passwordResetTokenHash +passwordResetExpires')
+      .exec();
+  }
+
+  async setPasswordResetToken(
+    email: string,
+    tokenHash: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    await this.userModel
+      .updateOne(
+        { email: email.toLowerCase().trim() },
+        {
+          $set: {
+            passwordResetTokenHash: tokenHash,
+            passwordResetExpires: expiresAt,
+          },
+        },
+      )
+      .exec();
+  }
+
+  async clearPasswordResetToken(email: string): Promise<void> {
+    await this.userModel
+      .updateOne(
+        { email: email.toLowerCase().trim() },
+        { $unset: { passwordResetTokenHash: '', passwordResetExpires: '' } },
+      )
+      .exec();
   }
 }

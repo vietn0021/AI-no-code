@@ -33,6 +33,12 @@ export class ProjectsController {
     return this.projectsService.create(dto, user.sub);
   }
 
+  @Get()
+  @ApiOperation({ summary: 'List projects for current user' })
+  list(@CurrentUser() user: { sub: string }) {
+    return this.projectsService.listForUser(user.sub);
+  }
+
   @Get(':id')
   @UseGuards(ProjectOwnerGuard)
   @ApiOperation({ summary: 'Get project by id' })

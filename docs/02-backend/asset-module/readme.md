@@ -45,6 +45,13 @@ Duoi day la bo palette mau de he thong co the chon mac dinh khi prompt khong chi
 
 ---
 
+## 2.5 Đồng bộ với Studio (frontend)
+
+- Inspector Studio dùng cùng bộ palette tham chiếu (`ASSET_PALETTES` trong `InspectorPanel.tsx`, đồng bộ ý tưởng với các palette dưới đây).
+- Entity **sprite** trên canvas: `type: 'sprite'` + `assetUrl` (URL hoặc data URL) — render `<img>` + `object-fit: contain`; có thể thêm thủ công từ tab **Assets** trong editor (xem `docs/03-frontend/studio-editor/readme.md`).
+
+---
+
 ## 3) Quy tac xu ly mau sac (bat buoc)
 
 **Quy dinh chinh thuc:**

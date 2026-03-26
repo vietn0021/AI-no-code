@@ -1,15 +1,26 @@
-﻿# SYSTEM ARCHITECTURE — AI No-code Game Studio (Backend)
+# SYSTEM ARCHITECTURE — AI No-code Game Studio
 
 ## 0) Scope & Snapshot
 
-Tài liệu này mô tả kiến trúc hiện tại của `source-code/backend` dựa trên code thực tế và tài liệu trong `docs/`.
+Tài liệu này mô tả kiến trúc **full stack** hiện tại: `source-code/backend`, `source-code/frontend`, và tham chiếu `docs/`.
+
+### Backend
 
 - Framework: NestJS + TypeScript
-- Database: MongoDB Atlas + Mongoose
-- Auth: JWT Access Token + Passport
-- AI: Gemini (`@google/generative-ai`) + Zod validation
-- API Prefix: `/api`
-- Global response envelope: `{ success: true, data: ... }`
+- Database: MongoDB + Mongoose
+- Auth: JWT Access Token + Passport (`JwtAuthGuard`, `JwtStrategy`)
+- AI: Gemini (`@google/generative-ai`) + Zod validation (`GameConfigSchema`)
+- API prefix: `/api`
+- Global response envelope: `{ success: true, data: ... }` (`TransformInterceptor`)
+- Swagger UI: **`/api/docs`** (global prefix + `SwaggerModule.setup('docs', …)`)
+
+### Frontend
+
+- React 19 + Vite + TypeScript
+- Routing: `react-router-dom` (`AppRoutes`, `PrivateRoute`)
+- Auth: `AuthProvider` + `localStorage` key `access_token`
+- Studio state: Zustand `useEditorStore` (`gameConfig`, entities, `addEntity` / `updateEntity` / `removeEntity`)
+- UI: Tailwind, Framer Motion, `react-hot-toast`
 
 ---
 
@@ -31,16 +42,16 @@ Hệ thống đang theo mô hình module-based + layered:
 
 ### 1.2 Module hiện có
 
-| Module | Vai trò | Thành phần chính |
-|---|---|---|
-| `AuthModule` | Đăng ký/đăng nhập/profile + JWT strategy | `AuthController`, `AuthService`, `JwtStrategy`, `JwtAuthGuard` |
-| `UsersModule` | Quản lý user model/service nền cho auth | `UserSchema`, `UsersService`, `UsersController` |
-| `ProjectsModule` | Nghiệp vụ project + generate + rollback + versioning | `ProjectsController`, `ProjectsService`, `ProjectsRepository`, `ProjectOwnerGuard` |
-| `ProjectVersionsModule` | API tạo snapshot trực tiếp | `ProjectVersionsController`, `ProjectVersionsService` |
-| `AssetsModule` | Lưu metadata asset | `AssetsController`, `AssetsService` |
-| `PromptsModule` | Log prompt/response AI | `PromptsController`, `PromptsService` |
-| `AiEngineModule` | Gọi Gemini, parse/normalize/validate game config | `AiEngineController`, `AiEngineService` |
-| `DatabaseModule` | Kết nối DB + logging + global mongoose JSON transform | `MongooseModule.forRootAsync`, `DatabaseLoggerService` |
+| Module                  | Vai trò                                               | Thành phần chính                                                                   |
+| ----------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `AuthModule`            | Đăng ký/đăng nhập/profile + JWT strategy              | `AuthController`, `AuthService`, `JwtStrategy`, `JwtAuthGuard`                     |
+| `UsersModule`           | Quản lý user model/service nền cho auth               | `UserSchema`, `UsersService`, `UsersController`                                    |
+| `ProjectsModule`        | Nghiệp vụ project + generate + rollback + versioning  | `ProjectsController`, `ProjectsService`, `ProjectsRepository`, `ProjectOwnerGuard` |
+| `ProjectVersionsModule` | API tạo snapshot trực tiếp                            | `ProjectVersionsController`, `ProjectVersionsService`                              |
+| `AssetsModule`          | Lưu metadata asset                                    | `AssetsController`, `AssetsService`                                                |
+| `PromptsModule`         | Log prompt/response AI                                | `PromptsController`, `PromptsService`                                              |
+| `AiEngineModule`        | Gọi Gemini, parse/normalize/validate game config      | `AiEngineController`, `AiEngineService`                                            |
+| `DatabaseModule`        | Kết nối DB + logging + global mongoose JSON transform | `MongooseModule.forRootAsync`, `DatabaseLoggerService`                             |
 
 ### 1.3 Sơ đồ phân tầng (Mermaid)
 
@@ -61,50 +72,53 @@ flowchart TD
 
 ### 2.1 Route hạ tầng
 
-| Method | Path | Guard | Handler |
-|---|---|---|---|
-| GET | `/` | None | `AppController.getHello()` |
-| N/A | `/docs` | None | Swagger UI (setup trong `main.ts`) |
+| Method | Path    | Guard | Handler                            |
+| ------ | ------- | ----- | ---------------------------------- |
+| GET    | `/`     | None  | `AppController.getHello()`         |
+| N/A    | `/api/docs` | None  | Swagger UI (`setup('docs')` + prefix `api`) |
 
 ### 2.2 Auth APIs
 
-| Method | Path | Guard | Controller Handler |
-|---|---|---|---|
-| POST | `/auth/register` | None | `AuthController.register()` |
-| POST | `/auth/login` | None | `AuthController.login()` |
-| GET | `/auth/profile` | `JwtAuthGuard` | `AuthController.profile()` |
+| Method | Path                    | Guard          | Controller Handler                |
+| ------ | ----------------------- | -------------- | --------------------------------- |
+| POST   | `/auth/register`        | None           | `AuthController.register()`       |
+| POST   | `/auth/login`           | None           | `AuthController.login()`          |
+| POST   | `/auth/forgot-password` | None           | `AuthController.forgotPassword()` |
+| POST   | `/auth/reset-password`  | None           | `AuthController.resetPassword()`  |
+| GET    | `/auth/profile`         | `JwtAuthGuard` | `AuthController.profile()`        |
 
 ### 2.3 Users APIs
 
-| Method | Path | Guard | Controller Handler |
-|---|---|---|---|
-| POST | `/users` | None | `UsersController.create()` |
+| Method | Path     | Guard | Controller Handler         |
+| ------ | -------- | ----- | -------------------------- |
+| POST   | `/users` | None  | `UsersController.create()` |
 
 ### 2.4 Projects APIs
 
-| Method | Path | Guard | Controller Handler |
-|---|---|---|---|
-| POST | `/projects` | None | `ProjectsController.create()` |
-| GET | `/projects/:id` | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.findOne()` |
-| GET | `/projects/:id/versions` | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.listVersions()` |
-| PATCH | `/projects/:id` | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.update()` |
-| POST | `/projects/:id/generate` | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.generate()` |
-| POST | `/projects/:id/rollback` | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.rollback()` |
+| Method | Path                     | Guard                               | Controller Handler                  |
+| ------ | ------------------------ | ----------------------------------- | ----------------------------------- |
+| POST   | `/projects`              | `JwtAuthGuard`                      | `ProjectsController.create()`       |
+| GET    | `/projects`              | `JwtAuthGuard`                      | `ProjectsController.list()`         |
+| GET    | `/projects/:id`          | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.findOne()`      |
+| GET    | `/projects/:id/versions` | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.listVersions()` |
+| PATCH  | `/projects/:id`          | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.update()`       |
+| POST   | `/projects/:id/generate` | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.generate()`     |
+| POST   | `/projects/:id/rollback` | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.rollback()`     |
 
 ### 2.5 AI Engine APIs
 
-| Method | Path | Guard | Controller Handler |
-|---|---|---|---|
-| GET | `/ai/models` | None | `AiEngineController.listModels()` |
-| POST | `/ai/generate` | None | `AiEngineController.generate()` |
+| Method | Path           | Guard | Controller Handler                |
+| ------ | -------------- | ----- | --------------------------------- |
+| GET    | `/ai/models`   | None  | `AiEngineController.listModels()` |
+| POST   | `/ai/generate` | None  | `AiEngineController.generate()`   |
 
 ### 2.6 Other Module APIs
 
-| Method | Path | Guard | Controller Handler |
-|---|---|---|---|
-| POST | `/project-versions` | None | `ProjectVersionsController.create()` |
-| POST | `/assets` | None | `AssetsController.create()` |
-| POST | `/prompts` | None | `PromptsController.create()` |
+| Method | Path                | Guard | Controller Handler                   |
+| ------ | ------------------- | ----- | ------------------------------------ |
+| POST   | `/project-versions` | None  | `ProjectVersionsController.create()` |
+| POST   | `/assets`           | None  | `AssetsController.create()`          |
+| POST   | `/prompts`          | None  | `PromptsController.create()`         |
 
 ---
 
@@ -233,33 +247,35 @@ sequenceDiagram
 
 ### 4.1 Auth / Users
 
-| Hàm | Vị trí | Nhiệm vụ |
-|---|---|---|
-| `UserSchema.pre('save')` | `users/schemas/user.schema.ts` | Hash password nếu thay đổi (`bcrypt.hash(10)`). |
-| `UsersService.findByEmail(email, includePassword)` | `users/users.service.ts` | Query user theo email, tùy chọn include password. |
-| `AuthService.register(dto)` | `auth/auth.service.ts` | Check duplicate email, create user, trả public profile. |
-| `AuthService.login(dto)` | `auth/auth.service.ts` | Verify password bằng bcrypt, sign JWT access token. |
-| `JwtStrategy.validate(payload)` | `auth/strategies/jwt.strategy.ts` | Chuẩn hóa payload JWT thành request user context. |
+| Hàm                                                | Vị trí                            | Nhiệm vụ                                                                                    |
+| -------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------- |
+| `UserSchema.pre('save')`                           | `users/schemas/user.schema.ts`    | Hash password nếu thay đổi (`bcrypt.hash(10)`).                                             |
+| `UsersService.findByEmail(email, includePassword)` | `users/users.service.ts`          | Query user theo email, tùy chọn include password.                                           |
+| `AuthService.register(dto)`                        | `auth/auth.service.ts`            | Check duplicate email, create user, trả public profile.                                     |
+| `AuthService.login(dto)`                           | `auth/auth.service.ts`            | Verify password bằng bcrypt, sign JWT access token.                                         |
+| `AuthService.forgotPassword(dto)`                  | `auth/auth.service.ts`            | Tạo token reset (hash SHA-256), lưu hạn dùng; luôn trả cùng message (không lộ email).       |
+| `AuthService.resetPassword(dto)`                   | `auth/auth.service.ts`            | So khớp token (timing-safe), kiểm tra hạn, đổi mật khẩu (bcrypt pre-save), xóa token reset. |
+| `JwtStrategy.validate(payload)`                    | `auth/strategies/jwt.strategy.ts` | Chuẩn hóa payload JWT thành request user context.                                           |
 
 ### 4.2 Project / Versioning
 
-| Hàm | Vị trí | Nhiệm vụ |
-|---|---|---|
-| `ProjectsService.update(id, dto)` | `projects/projects.service.ts` | Nếu `gameConfig` đổi: transaction snapshot (`manual`) rồi update + tăng `currentVersion`. |
-| `ProjectsService.generate(id, dto)` | `projects/projects.service.ts` | Gọi AI Engine, snapshot (`ai`), update project (config mới + `currentVersion++`). |
-| `ProjectsService.rollback(id, dto)` | `projects/projects.service.ts` | Tìm snapshot target, lưu snapshot hiện tại (`rollback`), restore config target. |
-| `ProjectsRepository.insertSnapshot(...)` | `projects/projects.repository.ts` | Persist `ProjectVersion` document cho history. |
-| `ProjectOwnerGuard.canActivate()` | `projects/guards/project-owner.guard.ts` | Chặn user không phải owner truy cập/sửa project. |
+| Hàm                                      | Vị trí                                   | Nhiệm vụ                                                                                  |
+| ---------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `ProjectsService.update(id, dto)`        | `projects/projects.service.ts`           | Nếu `gameConfig` đổi: transaction snapshot (`manual`) rồi update + tăng `currentVersion`. |
+| `ProjectsService.generate(id, dto)`      | `projects/projects.service.ts`           | Gọi AI Engine, snapshot (`ai`), update project (config mới + `currentVersion++`).         |
+| `ProjectsService.rollback(id, dto)`      | `projects/projects.service.ts`           | Tìm snapshot target, lưu snapshot hiện tại (`rollback`), restore config target.           |
+| `ProjectsRepository.insertSnapshot(...)` | `projects/projects.repository.ts`        | Persist `ProjectVersion` document cho history.                                            |
+| `ProjectOwnerGuard.canActivate()`        | `projects/guards/project-owner.guard.ts` | Chặn user không phải owner truy cập/sửa project.                                          |
 
 ### 4.3 AI Engine
 
-| Hàm | Vị trí | Nhiệm vụ |
-|---|---|---|
+| Hàm                                                      | Vị trí                           | Nhiệm vụ                                                                            |
+| -------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
 | `AiEngineService.generateGameConfig(prompt, projectId?)` | `ai-engine/ai-engine.service.ts` | Orchestrate toàn bộ pipeline gọi Gemini -> parse -> validate -> normalize -> retry. |
-| `extractLikelyJson(text)` | `ai-engine/ai-engine.service.ts` | Trích JSON object từ raw text model trả về. |
-| `preprocessLogicArray(parsed, logger)` | `ai-engine/ai-engine.service.ts` | Chuyển `logic` dạng string[] / mixed về object[] phòng vỡ Zod. |
-| `normalizeThemeAndEntityHexColors(config)` | `ai-engine/ai-engine.service.ts` | Validate/fallback HEX từ palette pool cho theme/entity. |
-| `clampEntityPositions(config)` | `ai-engine/ai-engine.service.ts` | Ép tọa độ entity vào [0..100]. |
+| `extractLikelyJson(text)`                                | `ai-engine/ai-engine.service.ts` | Trích JSON object từ raw text model trả về.                                         |
+| `preprocessLogicArray(parsed, logger)`                   | `ai-engine/ai-engine.service.ts` | Chuyển `logic` dạng string[] / mixed về object[] phòng vỡ Zod.                      |
+| `normalizeThemeAndEntityHexColors(config)`               | `ai-engine/ai-engine.service.ts` | Validate/fallback HEX từ palette pool cho theme/entity.                             |
+| `clampEntityPositions(config)`                           | `ai-engine/ai-engine.service.ts` | Ép tọa độ entity vào [0..100].                                                      |
 
 ### 4.4 Cơ chế Versioning / Snapshot
 
@@ -350,27 +366,62 @@ Ngay cả khi model trả sai format:
 
 ---
 
-## 7) Architectural Notes / Gaps (Thực trạng hiện tại)
+## 7) Frontend — Studio & Data Model (Editor)
 
-1. **Tài liệu vs code đã đổi**
-   - Docs ban đầu đề cập user có `username/role`; code auth hiện hành đã tối giản về `email/password/fullName`.
-2. **Owner guard cho Create Project**
-   - `POST /projects` hiện chưa buộc JWT (client tự gửi `userId`); nếu muốn chặt hơn nên bắt JWT và set `userId` từ token.
-3. **ProjectVersionsModule endpoint public**
-   - `POST /project-versions` chưa có guard; có thể giới hạn internal-only.
-4. **Refresh token chưa có**
-   - Auth hiện chỉ Access Token (đúng scope tài liệu hiện tại).
+### 7.1 Route & layout
+
+- **Studio:** `/studio/:projectId` → `EditorPage.tsx` (bảo vệ `PrivateRoute`).
+- Layout 3 cột: **AI Chat** (trái, thu/phóng), **Preview** (giữa), **Layers | Assets + Inspector** (phải).
+- File chính: `source-code/frontend/src/pages/studio/EditorPage.tsx`, `components/GameCanvas.tsx`, `components/EditorRightColumn.tsx`, `components/AiChatPanel.tsx`, `components/LayersPanel.tsx`, `components/InspectorPanel.tsx`, `components/AssetsPanel.tsx`.
+
+### 7.2 `gameConfig` & entity trên client
+
+- Store: `useEditorStore.ts` — `EditorGameConfig` gồm `entities`, `theme`, `logic`, `assets?`.
+- **`GameEntity`:** `id`, `type`, `shapeType` (`Square` | `Circle` | `Triangle`), `colorHex`/`color`, `position` (%), `width`/`height` (px), `settings?`, **`assetUrl?`** (khi `type === 'sprite'`).
+- **Sprite / ảnh thật:** entity `type: 'sprite'` + `assetUrl` → `GameCanvas` render **`<img>`** trong khung tuyệt đối, **`object-fit: contain`**, kéo thả vị trí giống entity hình học.
+- **Thư viện mẫu:** tab **Assets** — `studioSampleAssets.ts` (`STUDIO_SAMPLE_ASSETS`, MIME kéo `application/x-studio-asset`). Kéo thả vào Preview → `addEntity` với `settings.studioLabel` (hiển thị trên Layers).
+
+### 7.3 API Studio dùng từ frontend
+
+- `GET/ PATCH /api/projects/:id`, `POST .../generate`, `GET .../versions`, `POST .../rollback` — Bearer JWT + owner guard (khớp `projects.controller.ts`).
+- Client: `services/projects.api.ts`, `services/auth.api.ts`.
 
 ---
 
-## 8) Quick Traceability (File tham chiếu chính)
+## 8) Architectural Notes / Gaps (Thực trạng hiện tại)
 
-- Bootstrap: `src/main.ts`
-- App wiring: `src/app.module.ts`
-- Auth: `src/modules/auth/*`
-- Users: `src/modules/users/*`
-- Projects/versioning: `src/modules/projects/*`, `src/modules/project-versions/*`
-- AI: `src/modules/ai-engine/*`
-- DB setup: `src/providers/database/*`
-- Design docs: `docs/00-project-init/*`, `docs/01-system-design/*`, `docs/02-backend/*`
+1. **Tài liệu vs code đã đổi**
+   - Docs cũ có thể đề cập `username/role`; user hiện tại: `email`, `password`, `fullName` (+ trường reset password trên schema).
+2. **Create Project**
+   - `POST /api/projects` **đã** bảo vệ `JwtAuthGuard`; `userId` lấy từ `@CurrentUser() user.sub`, body **không** gửi `userId` (xem `CreateProjectDto`).
+3. **ProjectVersionsModule endpoint public**
+   - `POST /project-versions` chưa có guard; có thể giới hạn internal-only.
+4. **Refresh token chưa có**
+   - Auth hiện chỉ Access Token.
+5. **AI Zod vs sprite thủ công**
+   - `EntitySchema` dùng `.passthrough()` nên field như `assetUrl` không bị Zod loại khi AI trả về; `GameConfig` vẫn bắt buộc có entity `type: 'player'`. Sprite kéo từ Studio có thể cùng scene với player do AI tạo.
 
+---
+
+## 9) Quick Traceability (File tham chiếu chính)
+
+### Backend
+
+- Bootstrap: `source-code/backend/src/main.ts`
+- App wiring: `source-code/backend/src/app.module.ts`
+- Auth: `source-code/backend/src/modules/auth/*`
+- Users: `source-code/backend/src/modules/users/*`
+- Projects/versioning: `source-code/backend/src/modules/projects/*`, `project-versions/*`
+- AI: `source-code/backend/src/modules/ai-engine/*`
+- DB setup: `source-code/backend/src/providers/database/*`
+
+### Frontend
+
+- Entry / routes: `source-code/frontend/src/App.tsx`, `routes/AppRoutes.tsx`, `routes/PrivateRoute.tsx`
+- Auth UI: `pages/auth/*`, `contexts/AuthProvider.tsx`
+- Dashboard: `pages/dashboard/*`
+- Studio: `pages/studio/*`, `store/useEditorStore.ts`, `pages/studio/lib/entityView.ts`, `pages/studio/lib/studioSampleAssets.ts`
+
+### Design docs
+
+- `docs/00-project-init/*`, `docs/01-system-design/*`, `docs/02-backend/*`, `docs/03-frontend/*`

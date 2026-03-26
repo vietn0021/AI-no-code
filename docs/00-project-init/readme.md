@@ -11,6 +11,7 @@
 - `/docs`: Chứa tài liệu hướng dẫn chia theo module.
 - `/source-code/backend`: Mã nguồn NestJS.
 - `/source-code/frontend`: Mã nguồn React Vite.
+- **`SYSTEM_ARCHITECTURE.md`** (thư mục gốc repo): ảnh chụp kiến trúc **backend + frontend** và bản đồ API/file chính — nên đọc khi đồng bộ tài liệu với code.
 
 ## 3. Port & API Configuration
 - **Backend Port:** 3001

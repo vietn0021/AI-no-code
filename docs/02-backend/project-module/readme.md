@@ -83,10 +83,12 @@ Duoi day la bo endpoint toi thieu cho `Project Module`.
 ### 4.1 Create Project
 
 - `POST /api/projects`
-- Body:
-  - `name`, `description?`, `gameConfig?`, `userId`
-- Ket qua:
-  - Tao project moi voi `currentVersion = 1`.
+- **Bắt buộc:** header `Authorization: Bearer <access_token>` (`JwtAuthGuard` trên toàn bộ `ProjectsController`).
+- Body (`CreateProjectDto`):
+  - `name` (bắt buộc), `description?`, `rawPrompt?`, `gameConfig?`, `status?`
+  - **Không** gửi `userId` — server gán owner từ JWT (`@CurrentUser() user.sub`).
+- Kết quả:
+  - Tạo project mới với `currentVersion = 1`, `userId` = user đăng nhập.
 
 ### 4.2 Get Project
 

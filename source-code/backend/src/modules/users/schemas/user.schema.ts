@@ -14,6 +14,16 @@ export class User {
 
   @Prop({ required: true, trim: true })
   fullName!: string;
+
+  createdAt?: Date;
+  updatedAt?: Date;
+
+  /** SHA-256 hex of the raw reset token (never store plain token). */
+  @Prop({ type: String, select: false })
+  passwordResetTokenHash?: string;
+
+  @Prop({ type: Date, select: false })
+  passwordResetExpires?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

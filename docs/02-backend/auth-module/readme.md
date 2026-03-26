@@ -52,6 +52,18 @@ Trường cốt lõi phục vụ đăng ký / đăng nhập:
 - **Bảo vệ:** `JwtAuthGuard` (hoặc tương đương).
 - **Bước xử lý:** Giải mã JWT → lấy `sub` → load user từ DB → trả `{ id, email, fullName, ... }` (không password).
 
+### 3.4 `POST /api/auth/forgot-password` — Yêu cầu đặt lại mật khẩu
+
+- **Body:** `{ email }`
+- **Xử lý:** Tạo token reset, lưu **hash SHA-256** + thời hạn trên user (`passwordResetTokenHash`, `passwordResetExpires`, `select: false`).
+- **Response:** Luôn trả cùng dạng thông báo chung (không tiết lộ email có tồn tại hay không).
+
+### 3.5 `POST /api/auth/reset-password` — Đặt mật khẩu mới
+
+- **Body:** `{ email, token, password }` (độ dài mật khẩu theo DTO backend, đồng bộ register).
+- **Xử lý:** So khớp token (timing-safe), kiểm tra hạn, cập nhật mật khẩu (bcrypt qua pre-save), xóa token reset.
+- **Lỗi:** `400` với message chung nếu token sai / hết hạn.
+
 ---
 
 ## 4) Middleware / Guards & Project Module
@@ -63,9 +75,14 @@ Trường cốt lõi phục vụ đăng ký / đăng nhập:
 
 ### 4.2 Bảo vệ Project Module — chỉ chủ sở hữu
 
-`Project` có `userId` (owner). Quy tắc:
+`Project` có `userId` (owner). **Triển khai hiện tại:**
 
-- **Đọc (GET project / list):** Có thể chỉ cho owner, hoặc public read + private write — mặc định đề xuất: **chỉ owner** xem/sửa project của mình.
+- **`POST /api/projects` và `GET /api/projects`:** chỉ user đã đăng nhập; danh sách / tạo mới gắn với `user.sub` từ JWT.
+- **GET/PATCH/generate/rollback theo `:id`:** thêm **`ProjectOwnerGuard`** — chỉ owner của project.
+
+Quy tắc tổng quát:
+
+- **Đọc (GET project / list):** list theo user; chi tiết project theo id chỉ owner.
 - **Ghi (PATCH, POST generate, POST rollback, …):**  
   - So sánh `project.userId` với `request.user.id` (hoặc `sub` từ JWT).  
   - Không khớp → **`403 Forbidden`**.
@@ -96,4 +113,6 @@ JWT_EXPIRES_IN=3600s
 
 1. **Register** → tạo user, password đã hash.  
 2. **Login** → nhận **Access Token**.  
-3. **Profile** + **Project APIs** → gửi `Authorization: Bearer`, guard JWT + kiểm tra **owner** trên mọi thao tác thay đổi game/project.
+3. **Forgot password** → lưu hash token + hạn trên user; phản hồi generic.  
+4. **Reset password** → xác thực token, đổi mật khẩu, xóa token reset.  
+5. **Profile** + **Project APIs** → gửi `Authorization: Bearer`; toàn bộ `/projects` yêu cầu JWT; thao tác theo `:id` thêm **owner guard**.

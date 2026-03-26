@@ -93,8 +93,8 @@ Pseudo response mong doi:
 
 Co 2 huong de xuat:
 
-- `AuthContext` (React Context + hook)
-- `Zustand` store (goi y cho app lon)
+- **Triển khai hiện tại:** `AuthProvider` + `AuthContext` (`contexts/AuthProvider.tsx`) — lưu `access_token` trong `localStorage`, `login` / `logout` cập nhật state.
+- Có thể mở rộng: gọi `GET /api/auth/profile` sau khi hydrate token để lấy `user` đầy đủ (tùy product).
 
 State can co:
 
@@ -120,6 +120,19 @@ Quy tac khoi tao:
      - "If your email exists, a reset link has been sent."
 5. Neu that bai:
    - Hien message loi tu backend theo format `success: false`.
+
+### 3.5 Reset Password Flow
+
+1. User mo link tu email (hoac query tu dev): `/auth/reset-password?token=...&email=...`
+2. Form: email (co the pre-fill), token (co the pre-fill tu query), mat khau moi.
+3. Frontend goi:
+   - `POST /api/auth/reset-password`
+   - Body: `{ email, token, password }` (`password` toi thieu 8 ky tu, dong bo Register)
+4. Neu thanh cong:
+   - Backend tra `{ message: "Password has been reset successfully" }` (trong envelope `success: true, data`).
+   - Dieu huong ve `/auth/login` va hien toast thanh cong.
+5. Neu that bai (token sai / het han / email khong khop):
+   - Backend tra `400` voi message chung: `Invalid or expired reset token` (khong tiet lo chi tiet).
 
 ---
 
@@ -158,7 +171,8 @@ Case can cover:
 ### 5.1 Route private
 
 - `/dashboard`
-- `/studio-editor` (hoac `/editor/:projectId`)
+- `/templates`, `/settings`
+- `/studio/:projectId` (Studio Editor — tham số `projectId` thật từ API)
 
 ### 5.2 Rule
 
@@ -189,6 +203,8 @@ return children
   - Body: `{ email, password }`
 - `POST /api/auth/forgot-password`
   - Body: `{ email }`
+- `POST /api/auth/reset-password`
+  - Body: `{ email, token, password }`
 - `GET /api/auth/profile`
   - Header: `Authorization: Bearer <access_token>`
 
@@ -201,7 +217,8 @@ Auth Flow can dam bao:
 1. UI nhat quan voi Design System (`GlassCard`, `SmartInput`, `PastelButton secondary`).
 2. Logic login/register dung API backend hien tai.
 3. Co man hinh quen mat khau va link dieu huong ro rang.
-4. Password input ho tro an/hien bang icon con mat.
-5. Luu trang thai dang nhap toan cuc va persistent sau refresh.
-6. Co error UX ro rang theo format loi thong nhat tu backend.
-7. Bao ve route private truoc khi vao Dashboard/Editor.
+4. Co man hinh dat lai mat khau (`/auth/reset-password`) sau forgot-password.
+5. Password input ho tro an/hien bang icon con mat.
+6. Luu trang thai dang nhap toan cuc va persistent sau refresh.
+7. Co error UX ro rang theo format loi thong nhat tu backend.
+8. Bao ve route private truoc khi vao Dashboard/Editor.

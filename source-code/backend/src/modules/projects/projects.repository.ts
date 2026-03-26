@@ -21,6 +21,13 @@ export class ProjectsRepository {
     return this.projectModel.findById(id).exec();
   }
 
+  findByUserId(userId: Types.ObjectId): Promise<ProjectDocument[]> {
+    return this.projectModel
+      .find({ userId })
+      .sort({ updatedAt: -1 })
+      .exec();
+  }
+
   create(
     data: Partial<Project> & { userId: Types.ObjectId },
     session?: ClientSession,

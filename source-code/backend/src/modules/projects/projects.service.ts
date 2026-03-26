@@ -59,6 +59,11 @@ export class ProjectsService {
     });
   }
 
+  async listForUser(userId: string) {
+    const oid = this.assertObjectId(userId);
+    return this.projectsRepository.findByUserId(oid);
+  }
+
   async findOne(id: string) {
     const oid = this.assertObjectId(id);
     const project = await this.projectsRepository.findById(oid);
@@ -175,9 +180,17 @@ export class ProjectsService {
           dto.targetVersion!,
         );
 
-    if (!target || String(target.projectId) !== String(oid)) {
+    if (!target) {
       throw new NotFoundException('Target version not found for this project');
     }
+
+    if (String(target.projectId) !== String(oid)) {
+      throw new NotFoundException('Target version not found for this project');
+    }
+
+    // Đảm bảo TypeScript hiểu `target` chắc chắn không null
+    // (đặc biệt khi tham chiếu trong callback async transaction).
+    const targetSnapshot = target.snapshot;
 
     const session = await this.connection.startSession();
     try {
@@ -194,7 +207,7 @@ export class ProjectsService {
         await this.projectsRepository.updateById(
           oid,
           {
-            gameConfig: { ...target.snapshot },
+            gameConfig: { ...(targetSnapshot as Record<string, unknown>) },
             currentVersion: project.currentVersion + 1,
           },
           s,
