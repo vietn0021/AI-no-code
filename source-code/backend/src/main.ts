@@ -16,9 +16,13 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  const corsOrigin = 'http://localhost:5173';
+  const allowedCorsOrigins = [
+    'http://localhost:5173',
+    'https://ai-no-code-zeta.vercel.app',
+  ];
+
   app.enableCors({
-    origin: corsOrigin,
+    origin: allowedCorsOrigins,
     credentials: true,
   });
 
@@ -26,7 +30,14 @@ async function bootstrap() {
   app.useStaticAssets(uploadsRoot, {
     prefix: '/uploads/',
     setHeaders: (res) => {
-      res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+      const originHeader = res.req?.headers?.origin;
+      const origin =
+        typeof originHeader === 'string' ? originHeader : undefined;
+      const allow =
+        origin && allowedCorsOrigins.includes(origin)
+          ? origin
+          : allowedCorsOrigins[0];
+      res.setHeader('Access-Control-Allow-Origin', allow);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
     },
   });
