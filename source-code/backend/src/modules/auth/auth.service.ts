@@ -14,6 +14,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 const FORGOT_PASSWORD_RESPONSE = {
   message: 'If your email exists, a reset link has been sent.',
@@ -79,6 +80,22 @@ export class AuthService {
 
   async profile(userId: string) {
     const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+    return {
+      id: String(user._id),
+      email: user.email,
+      fullName: user.fullName,
+      createdAt:
+        user.createdAt != null ? new Date(user.createdAt).toISOString() : undefined,
+    };
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.usersService.updateProfile(userId, {
+      fullName: dto.fullName,
+    });
     if (!user) {
       throw new UnauthorizedException('User not found');
     }

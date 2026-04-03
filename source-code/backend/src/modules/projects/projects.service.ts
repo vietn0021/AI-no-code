@@ -7,6 +7,7 @@ import { InjectConnection } from '@nestjs/mongoose';
 import type { ClientSession } from 'mongoose';
 import { Connection, Types } from 'mongoose';
 import { AiEngineService } from '../ai-engine/ai-engine.service';
+import { GAME_TEMPLATES } from '../templates/templates.service';
 import { VersionChangeSource } from '../project-versions/schemas/project-version.schema';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { GenerateProjectDto } from './dto/generate-project.dto';
@@ -47,6 +48,69 @@ export class ProjectsService {
     return new Types.ObjectId(id);
   }
 
+  /** gameConfig tối thiểu (1 player) + templateId + templateDefaults đã merge. */
+  private buildTemplateGameConfig(
+    templateId: string,
+    configFromAi: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const base = GAME_TEMPLATES.find((t) => t.id === templateId);
+    const templateDefaults = base
+      ? { ...base.defaultConfig }
+      : ({} as Record<string, unknown>);
+    const merged: Record<string, unknown> = {
+      ...templateDefaults,
+      ...configFromAi,
+    };
+
+    const bg =
+      typeof merged.backgroundColor === 'string' &&
+      merged.backgroundColor.trim().startsWith('#')
+        ? merged.backgroundColor.trim()
+        : '#F0F8FF';
+
+    let primary = '#BDE0FE';
+    for (const k of [
+      'snakeColor',
+      'birdColor',
+      'ballColor',
+      'paddleColor',
+      'playerColor',
+      'cardBackColor',
+      'primary',
+    ] as const) {
+      const v = merged[k];
+      if (typeof v === 'string' && /^#[0-9A-Fa-f]{3,8}$/i.test(v.trim())) {
+        primary = v.trim().startsWith('#') ? v.trim() : `#${v.trim()}`;
+        break;
+      }
+    }
+
+    const playerHex = /^#[0-9A-Fa-f]{3,8}$/i.test(primary) ? primary : '#9575CD';
+
+    return {
+      source_color: 'prompt',
+      theme: {
+        primary,
+        background: bg,
+        vibe: `Template: ${templateId}`,
+      },
+      entities: [
+        {
+          id: 'tpl-player-1',
+          type: 'player',
+          shapeType: 'Square',
+          colorHex: playerHex,
+          position: { x: 50, y: 72 },
+          width: 16,
+          height: 16,
+        },
+      ],
+      logic: [],
+      templateId,
+      templateDefaults: merged,
+    };
+  }
+
   async create(dto: CreateProjectDto, userId: string) {
     return this.projectsRepository.create({
       name: dto.name,
@@ -62,6 +126,13 @@ export class ProjectsService {
   async listForUser(userId: string) {
     const oid = this.assertObjectId(userId);
     return this.projectsRepository.findByUserId(oid);
+  }
+
+  async delete(id: string) {
+    const oid = this.assertObjectId(id);
+    const project = await this.projectsRepository.findById(oid);
+    if (!project) throw new NotFoundException('Project not found');
+    await this.projectsRepository.deleteById(oid);
   }
 
   async findOne(id: string) {
@@ -128,10 +199,49 @@ export class ProjectsService {
     const project = await this.projectsRepository.findById(oid);
     if (!project) throw new NotFoundException('Project not found');
 
-    const newGameConfig = await this.aiEngineService.generateGameConfig(
-      dto.prompt,
-      id,
-    );
+    const detection = await this.aiEngineService.detectGameTemplate(dto.prompt);
+
+    const prevGc = project.gameConfig as Record<string, unknown> | undefined;
+    const prevTemplateId =
+      typeof prevGc?.templateId === 'string'
+        ? prevGc.templateId.trim().toLowerCase()
+        : '';
+    let prevDefaults: Record<string, unknown> = {};
+    if (
+      prevGc?.templateDefaults != null &&
+      typeof prevGc.templateDefaults === 'object' &&
+      !Array.isArray(prevGc.templateDefaults)
+    ) {
+      prevDefaults = { ...(prevGc.templateDefaults as Record<string, unknown>) };
+    }
+
+    const isTemplateEditPrompt =
+      dto.prompt.includes('Người dùng đang chỉnh sửa game template') ||
+      dto.prompt.includes('Đang dùng template:') ||
+      dto.prompt.includes('CHỈ update templateConfig');
+    let effectiveConfidence = detection.confidence;
+    if (
+      isTemplateEditPrompt &&
+      prevTemplateId &&
+      detection.templateId === prevTemplateId &&
+      Object.keys(detection.config).length > 0 &&
+      effectiveConfidence <= 0.7
+    ) {
+      effectiveConfidence = 0.75;
+    }
+
+    const configPatch =
+      prevTemplateId === detection.templateId
+        ? { ...prevDefaults, ...detection.config }
+        : { ...detection.config };
+
+    const newGameConfig =
+      effectiveConfidence > 0.7 && detection.templateId !== 'none'
+        ? this.buildTemplateGameConfig(detection.templateId, configPatch)
+        : ((await this.aiEngineService.generateGameConfig(
+            dto.prompt,
+            id,
+          )) as unknown as Record<string, unknown>);
 
     const session = await this.connection.startSession();
     try {
@@ -148,7 +258,7 @@ export class ProjectsService {
         await this.projectsRepository.updateById(
           oid,
           {
-            gameConfig: newGameConfig as Record<string, unknown>,
+            gameConfig: newGameConfig,
             currentVersion: project.currentVersion + 1,
             rawPrompt: dto.prompt,
           },

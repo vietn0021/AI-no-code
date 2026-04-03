@@ -8,6 +8,29 @@ const PositionSchema = z.object({
 /** Đồng bộ với docs/02-backend/asset-module (Square, Circle, Triangle). */
 const ShapeTypeSchema = z.enum(['Square', 'Circle', 'Triangle']);
 
+const BehaviorSchema = z
+  .object({
+    type: z.string(),
+    speed: z.number().optional(),
+    force: z.number().optional(),
+    range: z.number().optional(),
+    target: z.string().optional(),
+    action: z.string().optional(),
+    value: z.number().optional(),
+    count: z.number().optional(),
+    interval: z.number().optional(),
+    cooldown: z.number().optional(),
+    bulletSpeed: z.number().optional(),
+    bulletColor: z.string().optional(),
+  })
+  .passthrough();
+
+const GameRulesEntrySchema = z.object({
+  trigger: z.string(),
+  value: z.number().optional(),
+  action: z.string(),
+});
+
 const EntitySchema = z
   .object({
     id: z.string(),
@@ -16,6 +39,7 @@ const EntitySchema = z
     colorHex: z.string().optional(),
     position: PositionSchema.optional(),
     settings: z.record(z.string(), z.unknown()).optional(),
+    behaviors: z.array(BehaviorSchema).optional().default([]),
   })
   .passthrough();
 
@@ -43,6 +67,8 @@ export const GameConfigSchema = z
       .passthrough(),
     entities: z.array(EntitySchema),
     logic: z.array(LogicRuleSchema).optional(),
+    rules: z.array(GameRulesEntrySchema).optional().default([]),
+    lives: z.number().optional().default(3),
   })
   .passthrough()
   .superRefine((val, ctx) => {

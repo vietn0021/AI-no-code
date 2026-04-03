@@ -20,7 +20,130 @@ const SYSTEM_INSTRUCTION = `AI phải tuân thủ nghiêm ngặt các quy tắc:
 - **Hình dạng entity:** Mỗi phần tử trong \`entities\` phải có \`shapeType\` là một trong: Square, Circle, Triangle (không dùng giá trị khác).
 - **Logic:** Luôn phải có 1 entity \`type: "player"\`.
 - **Logic Format (bắt buộc):** Trường \`logic\` là một mảng (Array). Tuyệt đối KHÔNG trả về \`logic\` là mảng các chuỗi văn bản mô tả thuần (ví dụ \`["rule 1", "rule 2"]\` là SAI). KHÔNG dùng mô tả văn bản thay cho cấu trúc object.
-- **Logic phần tử:** Mỗi phần tử trong \`logic\` PHẢI là một JSON Object với đúng các khóa: \`id\` (string), \`description\` (string), \`trigger\` (string), \`action\` (string).`;
+- **Logic phần tử:** Mỗi phần tử trong \`logic\` PHẢI là một JSON Object với đúng các khóa: \`id\` (string), \`description\` (string), \`trigger\` (string), \`action\` (string).
+
+CRITICAL RULES - PHẢI TUÂN THỦ:
+1. Mảng entities LUÔN LUÔN phải có ít nhất 1 entity với type: 'player'
+2. Entity player PHẢI là phần tử đầu tiên trong mảng entities
+3. Nếu prompt người dùng không đề cập player, tự động thêm:
+   { type: 'player', shapeType: 'Circle', position: { x: 50, y: 50 } }
+4. KHÔNG được bỏ qua rule này dù prompt là gì
+
+BEHAVIOR SYSTEM:
+Mỗi entity có thể có mảng behaviors[].
+Các behavior hợp lệ:
+
+MOVEMENT behaviors:
+- { type: 'move', speed: number } 
+  → player di chuyển WASD/arrow
+- { type: 'patrol', range: number, speed: number }
+  → entity đi qua lại
+- { type: 'follow', target: 'player', speed: number }
+  → entity đuổi theo player
+- { type: 'bounce', speed: number }
+  → entity nảy lại khi chạm tường
+- { type: 'circular', radius: number, speed: number }
+  → entity bay vòng tròn
+
+PHYSICS behaviors:
+- { type: 'gravity', force: number }
+  → entity bị kéo xuống
+- { type: 'jump', force: number }
+  → player nhảy khi on ground
+- { type: 'float' }
+  → entity lơ lửng, không gravity
+
+INTERACTION behaviors:
+- { type: 'shoot', cooldown: number, 
+    bulletSpeed: number, bulletColor: string }
+  → entity bắn đạn
+- { type: 'onCollide', target: string, 
+    action: string, value?: number }
+  → xử lý va chạm
+- { type: 'onCollect', action: string, value?: number }
+  → xử lý khi được nhặt
+
+SPAWN behaviors:
+- { type: 'spawnRandom', count: number }
+  → spawn nhiều bản sao random
+- { type: 'spawnOnTimer', interval: number }
+  → spawn theo thời gian
+
+ACTIONS hợp lệ cho onCollide/onCollect:
+- 'addScore': cộng value điểm
+- 'loseLife': mất 1 mạng
+- 'gameOver': kết thúc game
+- 'winGame': thắng game
+- 'nextLevel': lên level
+
+GAME RULES (gameConfig.rules[]):
+- { trigger: 'scoreReach', value: number, 
+    action: 'nextLevel'|'winGame' }
+- { trigger: 'livesZero', action: 'gameOver' }
+- { trigger: 'allCollected', action: 'winGame' }
+- { trigger: 'timerEnd', action: 'gameOver' }
+- { trigger: 'timer', value: number }
+  → đếm ngược seconds
+
+VÍ DỤ gameConfig hoàn chỉnh:
+{
+  entities: [
+    {
+      id: 'player', type: 'player',
+      shapeType: 'Circle', colorHex: '#00ff88',
+      position: { x: 50, y: 80 },
+      width: 40, height: 40,
+      behaviors: [
+        { type: 'move', speed: 200 },
+        { type: 'jump', force: 500 },
+        { type: 'gravity', force: 600 }
+      ]
+    },
+    {
+      id: 'enemy_1', type: 'enemy',
+      shapeType: 'Square', colorHex: '#ff4444',
+      position: { x: 30, y: 50 },
+      width: 40, height: 40,
+      behaviors: [
+        { type: 'patrol', range: 150, speed: 100 },
+        { type: 'onCollide', target: 'player', 
+          action: 'loseLife' }
+      ]
+    },
+    {
+      id: 'coin_1', type: 'collectible',
+      shapeType: 'Circle', colorHex: '#FFD700',
+      position: { x: 20, y: 30 },
+      width: 20, height: 20,
+      behaviors: [
+        { type: 'spawnRandom', count: 5 },
+        { type: 'onCollect', action: 'addScore', value: 10 }
+      ]
+    },
+    {
+      id: 'platform_1', type: 'platform',
+      shapeType: 'Square', colorHex: '#4ECDC4',
+      position: { x: 50, y: 90 },
+      width: 200, height: 20,
+      behaviors: []
+    }
+  ],
+  rules: [
+    { trigger: 'livesZero', action: 'gameOver' },
+    { trigger: 'allCollected', action: 'winGame' }
+  ],
+  theme: {
+    background: '#1a1a2e'
+  },
+  lives: 3
+}
+
+QUAN TRỌNG:
+- Không dùng templateId trong gameConfig sinh từ luồng entity-based (behaviors).
+- Luôn có entity type 'player' với behavior 'move'
+- Platform ở y: 85-95% để làm sàn
+- Behaviors phải phù hợp với type entity
+- Vẫn bắt buộc: source_color, theme.primary + theme.background (HEX) + theme.vibe, logic (mảng object như quy tắc cũ), entities có width/height khi cần.`;
 
 function extractLikelyJson(text: string): string {
   const start = text.indexOf('{');
@@ -78,6 +201,24 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
+const TEMPLATE_DETECT_SYSTEM =
+  'Bạn chỉ trả về MỘT JSON object thuần (không markdown, không code fence, không giải thích).';
+
+export type GameTemplateDetection = {
+  templateId: string;
+  confidence: number;
+  config: Record<string, unknown>;
+};
+
+const ALLOWED_TEMPLATE_IDS = new Set([
+  'snake',
+  'flappy',
+  'breakout',
+  'platformer',
+  'shooter',
+  'none',
+]);
+
 function clampEntityPositions(input: GameConfig): GameConfig {
   return {
     ...input,
@@ -132,14 +273,27 @@ export class AiEngineService {
     } as any);
   }
 
-  private async callGroq(fullPrompt: string): Promise<string> {
+  /** Gemini không kèm systemInstruction GameConfig — dùng cho detect template. */
+  private getTemplateDetectModel() {
+    const apiKey = this.config.getOrThrow<string>('GEMINI_API_KEY');
+    const genAI = new GoogleGenerativeAI(apiKey);
+    return genAI.getGenerativeModel({
+      model: 'gemini-3-flash-preview',
+      apiVersion: 'v1beta',
+    } as any);
+  }
+
+  private async callGroq(
+    fullPrompt: string,
+    systemContent: string = SYSTEM_INSTRUCTION,
+  ): Promise<string> {
     if (!this.groqClient) {
       throw new Error('callGroq: Groq client is not initialized');
     }
     const completion = await this.groqClient.chat.completions.create({
       model: this.groqModel,
       messages: [
-        { role: 'system', content: SYSTEM_INSTRUCTION },
+        { role: 'system', content: systemContent },
         { role: 'user', content: fullPrompt },
       ],
     });
@@ -379,5 +533,96 @@ export class AiEngineService {
     }
 
     throw new Error('AI.generateGameConfig: unexpected failure');
+  }
+
+  /**
+   * Phân loại prompt → templateId + confidence + config tùy chỉnh (không sinh full gameConfig).
+   */
+  async detectGameTemplate(prompt: string): Promise<GameTemplateDetection> {
+    const userBlock = [
+      'Phân tích prompt sau và trả về JSON:',
+      '{',
+      `  "templateId": "snake" | "flappy" | "breakout" | "platformer" | "shooter" | "none",`,
+      '  "confidence": <số 0 đến 1>,',
+      '  "config": { <các tham số tùy chỉnh, object> }',
+      '}',
+      '',
+      'Mapping:',
+      "- rắn săn mồi / snake → templateId: 'snake'",
+      "- flappy / chim bay → templateId: 'flappy'",
+      "- breakout / phá gạch / bóng → templateId: 'breakout'",
+      "- platformer / nhảy platform → templateId: 'platformer'",
+      "- bắn súng / shooter / space → templateId: 'shooter'",
+      '- không rõ / custom → templateId: "none"',
+      '',
+      'Config extract từ prompt:',
+      '- màu sắc → snakeColor / birdColor / ballColor / paddleColor / foodColor / pipeColor / backgroundColor (HEX khi có)',
+      '- tốc độ nhanh/chậm → speed: 250 hoặc 150 (số)',
+      '- khó/dễ → difficulty: "hard" hoặc "easy"',
+      '',
+      `Prompt: ${prompt}`,
+    ].join('\n');
+
+    const fallback: GameTemplateDetection = {
+      templateId: 'none',
+      confidence: 0,
+      config: {},
+    };
+
+    try {
+      let rawText: string;
+      if (this.useGroq) {
+        rawText = await this.callGroq(userBlock, TEMPLATE_DETECT_SYSTEM);
+      } else {
+        const model = this.getTemplateDetectModel();
+        const result = await model.generateContent([
+          { text: `${TEMPLATE_DETECT_SYSTEM}\n\n${userBlock}` },
+        ]);
+        rawText = result.response.text();
+      }
+
+      const jsonText = extractLikelyJson(rawText);
+      const parsed = JSON.parse(jsonText) as Record<string, unknown>;
+      let templateId =
+        typeof parsed.templateId === 'string'
+          ? parsed.templateId.trim().toLowerCase()
+          : 'none';
+      if (!ALLOWED_TEMPLATE_IDS.has(templateId)) {
+        templateId = 'none';
+      }
+
+      let confidence = 0;
+      if (typeof parsed.confidence === 'number' && Number.isFinite(parsed.confidence)) {
+        confidence = clamp(parsed.confidence, 0, 1);
+      }
+
+      let config: Record<string, unknown> = {};
+      if (
+        parsed.config != null &&
+        typeof parsed.config === 'object' &&
+        !Array.isArray(parsed.config)
+      ) {
+        config = { ...(parsed.config as Record<string, unknown>) };
+      }
+      if (
+        parsed.templateConfig != null &&
+        typeof parsed.templateConfig === 'object' &&
+        !Array.isArray(parsed.templateConfig)
+      ) {
+        config = {
+          ...config,
+          ...(parsed.templateConfig as Record<string, unknown>),
+        };
+      }
+
+      this.logger.log(
+        `AI.detectGameTemplate: templateId=${templateId} confidence=${confidence}`,
+      );
+      return { templateId, confidence, config };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`AI.detectGameTemplate failed: ${msg}`);
+      return fallback;
+    }
   }
 }

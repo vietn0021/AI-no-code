@@ -9,7 +9,7 @@ Tài liệu này mô tả kiến trúc **full stack** hiện tại: `source-code
 - Framework: NestJS + TypeScript
 - Database: MongoDB + Mongoose
 - Auth: JWT Access Token + Passport (`JwtAuthGuard`, `JwtStrategy`)
-- AI: **Groq** (`groq-sdk`, tùy chọn) hoặc **Gemini** (`@google/generative-ai`) cho `generateGameConfig`; cùng pipeline Zod (`GameConfigSchema`) + normalize sau khi nhận text
+- AI: **Groq** (`groq-sdk`, tùy chọn) hoặc **Gemini** (`@google/generative-ai`) cho `generateGameConfig` và **`detectGameTemplate`**; pipeline Zod (`GameConfigSchema`) + normalize; `POST /projects/:id/generate` có thể trả config **template** hoặc **entity + behaviors**
 - API prefix: `/api`
 - Global response envelope: `{ success: true, data: ... }` (`TransformInterceptor`)
 - Swagger UI: **`/api/docs`** (global prefix + `SwaggerModule.setup('docs', …)`)
@@ -134,8 +134,11 @@ Luồng chuẩn khi gọi `POST /api/projects/:id/generate`:
    - `ProjectOwnerGuard` load project và kiểm tra `project.userId === request.user.userId`.
 3. `ProjectsService.generate(id, dto)`:
    - Load project.
-   - Gọi `AiEngineService.generateGameConfig(prompt, projectId)`.
-4. `AiEngineService.generateGameConfig(...)`:
+   - Gọi `AiEngineService.detectGameTemplate(prompt)` (LLM trích `templateId` + patch config).
+   - Nếu **confidence > 0.7** và template ≠ `none` → `buildTemplateGameConfig` (merge `templateDefaults`).
+   - Ngược lại → `AiEngineService.generateGameConfig(prompt, projectId)` (full entity-based config, có thể có `behaviors[]`, `rules`, `lives`).
+   - Heuristic: nếu prompt chứa marker chỉnh template Studio (ví dụ `Đang dùng template:` hoặc `CHỈ update templateConfig`) và khớp `templateId` project → có thể **tăng nhẹ confidence** để giữ nhánh template.
+4. `AiEngineService.generateGameConfig(...)` (khi không rơi vào nhánh template):
    - Build prompt context (`rawPrompt` cũ nếu có).
    - Inject palette/shapes rules vào prompt.
    - **LLM:** nếu env có `GROQ_API_KEY` → `groq-sdk` `chat.completions` (model `GROQ_MODEL`, mặc định `llama-3.3-70b-versatile`, system = `SYSTEM_INSTRUCTION`); ngược lại → Gemini `generateContent` (cùng nội dung user prompt).
@@ -170,11 +173,19 @@ sequenceDiagram
   OG->>PS: findOne(projectId)
   OG-->>PC: pass/fail
   PC->>PS: generate(projectId, prompt)
-  PS->>AIS: generateGameConfig(prompt, projectId)
-  AIS->>LLM: completions / generateContent (theo env)
-  LLM-->>AIS: JSON text
-  AIS->>AIS: parse + preprocess + zod + normalize
-  AIS-->>PS: newGameConfig
+  PS->>AIS: detectGameTemplate(prompt)
+  AIS->>LLM: completions / generateContent
+  LLM-->>AIS: template detection JSON
+  AIS-->>PS: templateId + config patch
+  alt confidence cao và template hợp lệ
+    Note over PS: buildTemplateGameConfig
+  else entity / behavior generate
+    PS->>AIS: generateGameConfig(prompt, projectId)
+    AIS->>LLM: completions / generateContent
+    LLM-->>AIS: JSON text
+    AIS->>AIS: parse + preprocess + zod + normalize
+    AIS-->>PS: newGameConfig
+  end
   PS->>PR: insertSnapshot(old config)
   PR->>DB: insert project_versions
   PS->>PR: update project(currentVersion++, gameConfig)
@@ -271,6 +282,7 @@ sequenceDiagram
 
 | Hàm                                                      | Vị trí                           | Nhiệm vụ                                                                            |
 | -------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
+| `AiEngineService.detectGameTemplate(prompt)` | `ai-engine/ai-engine.service.ts` | LLM trả `templateId` + patch + `confidence` cho nhánh template trong `ProjectsService.generate`. |
 | `AiEngineService.generateGameConfig(prompt, projectId?)` | `ai-engine/ai-engine.service.ts` | Orchestrate pipeline: Groq hoặc Gemini → text → parse → validate → normalize → retry (2 lần). |
 | `AiEngineService.callGroq(fullPrompt)` (private)          | `ai-engine/ai-engine.service.ts` | Gọi Groq Chat Completions; system = `SYSTEM_INSTRUCTION`.                            |
 | `extractLikelyJson(text)`                                | `ai-engine/ai-engine.service.ts` | Trích JSON object từ raw text model trả về.                                         |
@@ -361,7 +373,7 @@ Ngay cả khi model trả sai format:
 
 - `preprocessLogicArray` sửa `logic` từ string[] -> object[].
 - `normalizeThemeAndEntityHexColors` sửa mã HEX sai về màu hợp lệ trong palette pool.
-- `GameConfigSchema` (Zod) enforce structure (`source_color`, shapeType enum, player entity, logic object shape).
+- `GameConfigSchema` (Zod) enforce structure (`source_color`, shapeType enum, player entity, logic object shape); entity có thể có **`behaviors[]`**, config có **`rules`**, **`lives`** cho behavior runtime.
 
 => Tầng AI có cả **instruction-level constraint** + **runtime defensive normalization**.
 
@@ -389,12 +401,20 @@ Ngay cả khi model trả sai format:
 
 ### 7.4 AI Chat — ngữ cảnh scene
 
-- `AiChatPanel.tsx` đọc `gameConfig` từ `useEditorStore` và gửi lên API một **`contextPrompt`**: JSON scene hiện tại (`gameConfig`) + yêu cầu chỉnh sửa của user + hướng dẫn giữ phần không đổi.
+- `AiChatPanel.tsx` đọc `gameConfig` từ `useEditorStore` và gửi lên API một **`contextPrompt`**: luôn gồm **`JSON.stringify(gameConfig)`** đầy đủ + `Yêu cầu: …` + **HƯỚNG DẪN TRẢ VỀ** phụ thuộc trạng thái:
+  - Có **`templateId`** và **chưa** có entity nào có `behaviors[]`: ưu tiên chỉnh template (giữ `templateId`, cập nhật config template); đổi mechanic sâu → chuyển behavior system (xóa `templateId`, thêm `behaviors[]`).
+  - Ngược lại: **ưu tiên behavior system** — entity có `behaviors[]` phù hợp, không dùng `templateId`; liệt kê behavior/actions hợp lệ trong prompt.
 - UI chat vẫn hiển thị **chỉ prompt gốc** của user (không hiển thị full `contextPrompt`).
 
-### 7.5 Chế độ Play (Phaser)
+### 7.5 Chế độ Play (Phaser) — `GameRuntime.tsx`
 
-- Toggle **Preview / Play** trên khung giữa: Preview = `GameCanvas`; Play = `GameRuntime` (Phaser 3 Arcade) đọc `gameConfig` từ store — player điều khiển WASD / mũi tên; tam giác vẽ bằng `Graphics` + hitbox rect.
+- Toggle **Preview / Play**: Preview = `GameCanvas`; Play = **`GameRuntime`** (Phaser 3 Arcade).
+- **Routing scene:**
+  1. `templateId` thuộc tập template runtime → scene template tương ứng (`buildSnakeScene`, …).
+  2. Không template và `gameConfigUsesBehaviors(gameConfig)` (ít nhất một entity có `behaviors` không rỗng) → **`BehaviorRuntime.tsx`** — scene key `studioBehavior` (`buildBehaviorScene`): groups, colliders, `rules`, UI score/lives/timer, `executeAction`.
+  3. Còn lại → **`StudioRuntimeScene`** (key `studioRuntime`): player động WASD/mũi tên, entity khác chủ yếu static; texture từ shape/assetUrl giống behavior scene.
+- Chi tiết behavior: **`docs/03-frontend/studio-editor/behavior-runtime.md`**.
+- Static file upload: backend phục vụ **`/uploads/`** (CORS cho `localhost:5173`); frontend resolve `assetUrl` tương đối qua origin `:3001` khi Play (Phaser).
 
 ---
 
@@ -430,7 +450,7 @@ Ngay cả khi model trả sai format:
 - Entry / routes: `source-code/frontend/src/App.tsx`, `routes/AppRoutes.tsx`, `routes/PrivateRoute.tsx`
 - Auth UI: `pages/auth/*`, `contexts/AuthProvider.tsx`
 - Dashboard: `pages/dashboard/*`
-- Studio: `pages/studio/*` (gồm `components/GameRuntime.tsx`), `store/useEditorStore.ts`, `pages/studio/lib/entityView.ts`, `pages/studio/lib/studioSampleAssets.ts`
+- Studio: `pages/studio/*` (gồm `components/GameRuntime.tsx`, `components/BehaviorRuntime.tsx`, `AiChatPanel.tsx`), `store/useEditorStore.ts`, `pages/studio/lib/entityView.ts`, `pages/studio/lib/studioSampleAssets.ts`
 
 ### Design docs
 

@@ -1,21 +1,18 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsMongoId, IsObject, IsOptional, IsString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsIn, IsMongoId, IsString, MinLength } from 'class-validator';
+import { PROMPT_ROLES, type PromptRole } from '../schemas/prompt.schema';
 
 export class CreatePromptDto {
-  @ApiProperty()
-  @IsMongoId()
-  userId!: string;
-
-  @ApiProperty()
+  @ApiProperty({ description: 'Project MongoDB id' })
   @IsMongoId()
   projectId!: string;
 
-  @ApiProperty()
-  @IsString()
-  prompt!: string;
+  @ApiProperty({ enum: PROMPT_ROLES })
+  @IsIn(PROMPT_ROLES)
+  role!: PromptRole;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
-  @IsOptional()
-  @IsObject()
-  response?: Record<string, unknown>;
+  @ApiProperty({ description: 'Nội dung tin nhắn chat' })
+  @IsString()
+  @MinLength(1)
+  content!: string;
 }

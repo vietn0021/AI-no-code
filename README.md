@@ -2,6 +2,8 @@
 
 Ứng dụng **studio tạo game không cần code**: người dùng đăng ký/đăng nhập, quản lý dự án, chỉnh **game config** (JSON) qua **AI (Groq hoặc Gemini)** và **editor trực quan** (preview / play Phaser, layers, asset mẫu, sprite), có **versioning / rollback** phía backend.
 
+**Play mode:** ngoài các game **template** (Snake, Flappy, …), Studio hỗ trợ **behavior runtime** — entity có `behaviors[]` (move, jump, patrol, rules, …) khi không đặt `templateId`; scene Phaser đơn giản (legacy) vẫn dùng khi chưa có behaviors. Chi tiết: `docs/03-frontend/studio-editor/behavior-runtime.md`, `SYSTEM_ARCHITECTURE.md` mục Play.
+
 ---
 
 ## Kiến trúc & tài liệu
@@ -11,7 +13,7 @@
 | [**SYSTEM_ARCHITECTURE.md**](./SYSTEM_ARCHITECTURE.md) | Bản đồ kiến trúc **full stack**: module backend, API, frontend Studio, entity/sprite, file tham chiếu. |
 | [**docs/**](./docs/) | Đặc tả theo module: khởi tạo, system design, backend, frontend, testing. |
 
-Gợi ý đọc nhanh: `docs/00-project-init/readme.md`, `docs/03-frontend/studio-editor/readme.md`, `docs/02-backend/auth-module/readme.md`.
+Gợi ý đọc nhanh: `docs/00-project-init/readme.md`, `docs/03-frontend/studio-editor/readme.md`, `docs/03-frontend/studio-editor/behavior-runtime.md`, `docs/02-backend/auth-module/readme.md`.
 
 ---
 

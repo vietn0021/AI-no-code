@@ -6,3 +6,7 @@ node_modules/
 
 # Build output
 dist/
+
+# Uploaded assets (keep folder via uploads/.gitkeep)
+source-code/backend/uploads/*
+!source-code/backend/uploads/.gitkeep

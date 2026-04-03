@@ -6,13 +6,22 @@
 - **Chung:** Cùng `SYSTEM_INSTRUCTION` + user prompt; output là text → parse JSON → Zod → normalize.
 
 ## 2. Luồng xử lý (Pipeline)
-1. **User Input:** Nhận prompt + `projectId`.
-2. **Context:** Backend truy vấn `rawPrompt` cũ để Gemini biết người dùng đang muốn "sửa" hay "tạo mới".
-3. **AI Call:** Groq `chat.completions` (system + user) **hoặc** Gemini `generateContent` kèm **System Instruction** trên model.
-4. **Output Parsing:** - Loại bỏ rác (nếu có) để lấy chuỗi JSON.
-   - Sử dụng `zod` để validate cấu trúc `gameConfig`.
-5. **Normalization:** Ép màu về HEX, tọa độ `x,y` về dải 0-100.
-6. **Persistence:** Lưu vào MongoDB (Project & ProjectVersions).
+
+### 2.1 `POST /api/projects/:id/generate` (Studio)
+
+1. **User Input:** Body `{ prompt }` — prompt thường là **`contextPrompt`** từ `AiChatPanel` (full `gameConfig` JSON + hướng dẫn).
+2. **`detectGameTemplate(prompt)`:** LLM trả `templateId` + patch config + `confidence`.
+3. **Nhánh template:** Nếu `confidence > 0.7` và template ≠ `none` → merge với `templateDefaults` project, `buildTemplateGameConfig`.
+4. **Nhánh full config:** Ngược lại → `generateGameConfig` (bước 2.2).
+5. **Heuristic chỉnh template:** Nếu prompt chứa marker Studio (ví dụ `Đang dùng template:` hoặc `CHỈ update templateConfig`) và khớp template hiện tại → có thể tăng nhẹ confidence để không rơi nhầm sang full generate.
+
+### 2.2 `generateGameConfig` (entity-based)
+
+1. **Context:** Truy vấn `rawPrompt` cũ của project (nếu có `projectId`).
+2. **AI Call:** Groq `chat.completions` **hoặc** Gemini `generateContent` + **System Instruction** (có block **BEHAVIOR SYSTEM**: `behaviors[]`, `rules`, `lives`, …).
+3. **Output Parsing:** Trích JSON → `preprocessLogicArray` → **Zod** `GameConfigSchema`.
+4. **Normalization:** HEX, tọa độ entity [0..100].
+5. **Persistence:** Transaction snapshot + cập nhật `Project` (xem `ProjectsService.generate`).
 
 ## 3. System Instruction (Dạy AI)
 AI phải tuân thủ nghiêm ngặt các quy tắc:
@@ -52,4 +61,7 @@ AI phải luôn nỗ lực trả về JSON theo cấu trúc mẫu này:
 ## 6. Đồng bộ với code hiện tại (`GameConfigSchema`)
 
 - Validate bằng Zod tại `source-code/backend/src/modules/ai-engine/schemas/game-config.schema.ts`: bắt buộc `source_color`, `theme`, `entities` với `shapeType` enum `Square | Circle | Triangle`, và **ít nhất một entity** có `type === "player"`.
-- **`EntitySchema` dùng `.passthrough()`** — các field bổ sung (ví dụ `assetUrl`, `width`, `height`) không bị loại bỏ khi parse; frontend Studio có thể thêm entity **`type: "sprite"`** + `assetUrl` khi lưu `gameConfig` (xem `SYSTEM_ARCHITECTURE.md` mục Frontend).
+- **`EntitySchema` dùng `.passthrough()`** — các field bổ sung (ví dụ `assetUrl`, `width`, `height`, **`behaviors`**) không bị loại bỏ khi parse.
+- **`BehaviorSchema`:** object có `type` và các tham số tùy loại (`speed`, `force`, `onCollide`, …) — `.passthrough()`.
+- **Rules / lives:** `gameConfig` có thể có **`rules`** (mảng `{ trigger, action, value? }`) và **`lives`** (số) cho **behavior runtime** phía frontend (`docs/03-frontend/studio-editor/behavior-runtime.md`).
+- Frontend Studio: entity **`type: "sprite"`** + `assetUrl`; upload ảnh qua API → URL dưới `/uploads/` (xem `docs/02-backend/asset-module/readme.md`).

@@ -12,6 +12,7 @@
 - `/source-code/backend`: Mã nguồn NestJS.
 - `/source-code/frontend`: Mã nguồn React Vite.
 - **`SYSTEM_ARCHITECTURE.md`** (thư mục gốc repo): ảnh chụp kiến trúc **backend + frontend** và bản đồ API/file chính — nên đọc khi đồng bộ tài liệu với code.
+- **Play behaviors (Phaser):** `docs/03-frontend/studio-editor/behavior-runtime.md`.
 
 ## 3. Port & API Configuration
 - **Backend Port:** 3001

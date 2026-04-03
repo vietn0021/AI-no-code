@@ -85,4 +85,9 @@ export class ProjectsRepository {
   ): Promise<ProjectVersionDocument | null> {
     return this.projectVersionModel.findOne({ projectId, version }).exec();
   }
+
+  async deleteById(id: string | Types.ObjectId): Promise<void> {
+    await this.projectVersionModel.deleteMany({ projectId: id }).exec();
+    await this.projectModel.findByIdAndDelete(id).exec();
+  }
 }

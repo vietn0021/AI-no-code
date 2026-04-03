@@ -25,6 +25,8 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+**AI No-code Studio API:** `POST /api/projects/:id/generate` dùng **`detectGameTemplate`** rồi **`generateGameConfig`**; static upload **`/uploads/`** (xem `main.ts`). Tài liệu: `../../docs/02-backend/`, `../../SYSTEM_ARCHITECTURE.md`.
+
 ## Project setup
 
 ```bash

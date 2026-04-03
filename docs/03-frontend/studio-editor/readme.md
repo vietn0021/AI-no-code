@@ -20,14 +20,21 @@ Giao diện đồng bộ tông **Sky Blue + White + Glassmorphism** với Dashbo
 
 - Component: `components/AiChatPanel.tsx`.
 - Thu/phóng header; gọi `POST /api/projects/:projectId/generate` với Bearer token.
-- **Ngữ cảnh scene:** đọc `gameConfig` từ `useEditorStore`, build `contextPrompt` = JSON scene hiện tại + yêu cầu chỉnh sửa + hướng dẫn chỉ đổi phần được hỏi; **payload gửi API** dùng `contextPrompt`. Trong UI, bubble user vẫn hiển thị **prompt gốc** (không hiện full JSON context).
+- **Ngữ cảnh scene (`contextPrompt`):** luôn nhúng **`gameConfig` đầy đủ** (`JSON.stringify`) + dòng **Yêu cầu** + khối **HƯỚNG DẪN TRẢ VỀ**:
+  - Nếu có **`templateId`** và **chưa** có entity nào có `behaviors[]` → hướng dẫn ưu tiên chỉnh config template (giữ `templateId`); đổi mechanic → chuyển sang behavior (bỏ template, thêm `behaviors[]`).
+  - Ngược lại → **ưu tiên behavior system** (mỗi entity `behaviors[]`, không `templateId`), kèm danh sách behavior/actions hợp lệ.
+- **Payload gửi API** = `contextPrompt` đó. Trong UI, bubble user chỉ hiện **prompt gốc**.
 - Lịch sử tin nhắn + trạng thái loading / lỗi (toast + envelope backend).
 
 ### 2.3 Cột giữa — Preview / Play
 
 - Header khu vực canvas: toggle **Preview** | **Play** (`EditorPage.tsx`).
 - **Preview:** khung **aspect-video**, `GameCanvas.tsx` — đọc `gameConfig` từ **`useEditorStore`**.
-- **Play:** `GameRuntime.tsx` (Phaser 3 Arcade) — cùng `gameConfig`; entity `type: player` đầu tiên điều khiển WASD / mũi tên; còn lại static va chạm; tam giác vẽ bằng **Graphics** + hitbox hình chữ nhật; vị trí % → pixel như preview.
+- **Play:** `GameRuntime.tsx` (Phaser 3 Arcade) — cùng `gameConfig`:
+  - Có **`templateId`** (snake, flappy, …) → scene template tương ứng.
+  - **Không** template và có entity với **`behaviors[]` không rỗng** → `BehaviorRuntime.tsx` (scene `studioBehavior`): movement, physics, spawn, colliders, `rules`, score/lives/timer.
+  - Còn lại → scene **legacy** (`studioRuntime`): player WASD/mũi tên + entity static; texture shape/assetUrl.
+  - Chi tiết: **[behavior-runtime.md](./behavior-runtime.md)**.
 - **Entity hình học (Preview):** `div` theo `shapeType` (Square / Circle / Triangle), màu `colorHex`, vị trí **%** (tâm), kích thước **px** (`entityView.ts`).
 - **Entity sprite (ảnh):** `type === 'sprite'` + **`assetUrl`** → **`<img>`**, **`object-fit: contain`**; kéo pointer như entity khác.
 - **Kéo asset từ sidebar:** MIME `application/x-studio-asset` → `addEntity` tại tọa độ thả (%).
@@ -98,7 +105,8 @@ source-code/frontend/src/pages/studio/
   components/
     AiChatPanel.tsx
     GameCanvas.tsx
-    GameRuntime.tsx          # Phaser — chế độ Play
+    GameRuntime.tsx          # Phaser — chọn template / behavior / legacy Play
+    BehaviorRuntime.tsx      # Phaser scene behaviors + rules
     EditorRightColumn.tsx    # tab Layers | Assets
     LayersPanel.tsx
     AssetsPanel.tsx
@@ -125,5 +133,5 @@ source-code/frontend/src/store/
 | Assets | Tab Assets, kéo thả vào Preview → `addEntity` |
 | Store | Zustand `useEditorStore` |
 | AI | POST `/api/projects/:id/generate` + Bearer; prompt có context `gameConfig` (payload), UI chỉ hiện text user |
-| Play | Toggle Play → `GameRuntime` (Phaser) |
+| Play | Toggle Play → `GameRuntime` (template \| `BehaviorRuntime` \| legacy) |
 | Lưu / tải | GET + PATCH project, đồng bộ `gameConfig` |

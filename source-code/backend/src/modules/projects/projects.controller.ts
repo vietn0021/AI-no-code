@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -58,6 +59,13 @@ export class ProjectsController {
   @ApiOperation({ summary: 'Update project (snapshot if gameConfig changes)' })
   update(@Param('id') id: string, @Body() dto: UpdateProjectDto) {
     return this.projectsService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(ProjectOwnerGuard)
+  @ApiOperation({ summary: 'Delete project and its version history' })
+  remove(@Param('id') id: string) {
+    return this.projectsService.delete(id);
   }
 
   @Post(':id/generate')

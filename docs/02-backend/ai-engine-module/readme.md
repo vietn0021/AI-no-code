@@ -39,7 +39,13 @@ Xem mẫu trong `source-code/backend/.env.example`.
 | GET | `/api/ai/models` | None | Liệt kê model Gemini |
 | POST | `/api/ai/generate` | None | Generate `gameConfig` (debug; Studio chính thường dùng `POST /projects/:id/generate`) |
 
-Luồng project-driven: `ProjectsService.generate` → `AiEngineService.generateGameConfig(prompt, projectId?)`.
+Luồng project-driven: `ProjectsService.generate` gọi trước **`detectGameTemplate(prompt)`**; tùy confidence có thể **`buildTemplateGameConfig`** hoặc **`generateGameConfig(prompt, projectId?)`**.
+
+### 4.1 Behavior system trong `SYSTEM_INSTRUCTION`
+
+`ai-engine.service.ts` dạy model: mỗi entity có thể có **`behaviors[]`** (move, patrol, follow, bounce, circular, gravity, jump, float, shoot, onCollide, onCollect, spawnRandom, spawnOnTimer), **`gameConfig.rules`** (scoreReach, livesZero, allCollected, timer, timerEnd), **`lives`**. Luồng entity-based không dùng `templateId` trong output mẫu.
+
+Zod: `BehaviorSchema` + `behaviors` optional trên entity trong `game-config.schema.ts`.
 
 ---
 
@@ -48,3 +54,4 @@ Luồng project-driven: `ProjectsService.generate` → `AiEngineService.generate
 - `docs/01-system-design/ai-flow-logic.md`
 - `SYSTEM_ARCHITECTURE.md` (mục Data Flow AI, Integration Rules)
 - `docs/03-frontend/studio-editor/readme.md` (context prompt từ frontend)
+- `docs/03-frontend/studio-editor/behavior-runtime.md` (Play Phaser behaviors)

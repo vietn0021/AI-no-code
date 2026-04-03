@@ -108,11 +108,13 @@ Duoi day la bo endpoint toi thieu cho `Project Module`.
 
 - `POST /api/projects/:id/generate`
 - Body:
-  - `prompt`
-- Logic:
-  - Goi AI engine -> nhan `newGameConfig`.
-  - Luu snapshot cu vao `ProjectVersion`.
-  - Update `Project` voi cau hinh moi + tang `currentVersion`.
+  - `prompt` (Studio gửi **`contextPrompt`**: JSON `gameConfig` + yêu cầu + hướng dẫn template vs behavior — xem `docs/03-frontend/studio-editor/readme.md`).
+- Logic (`ProjectsService.generate`):
+  1. `AiEngineService.detectGameTemplate(prompt)` → `templateId`, patch config, `confidence`.
+  2. Nếu **confidence > 0.7** và template ≠ `none` → **`buildTemplateGameConfig`** (merge `templateDefaults` project).
+  3. Ngược lại → **`generateGameConfig(prompt, projectId)`** (full gameConfig, có thể có `behaviors[]`, `rules`, `lives`).
+  4. **Template-edit heuristic:** nếu prompt chứa một trong các chuỗi `Người dùng đang chỉnh sửa game template`, `Đang dùng template:`, `CHỈ update templateConfig`, và project đang cùng `templateId` với detection → có thể nâng confidence mặc định để giữ nhánh template.
+  5. Lưu snapshot cũ vào `ProjectVersion`, cập nhật `Project.gameConfig`, tăng `currentVersion`.
 
 ### 4.5 Rollback Project
 

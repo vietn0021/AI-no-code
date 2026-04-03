@@ -57,4 +57,20 @@ export class UsersService {
       )
       .exec();
   }
+
+  async updateProfile(
+    userId: string,
+    patch: { fullName?: string },
+  ): Promise<UserDocument | null> {
+    const set: Record<string, string> = {};
+    if (patch.fullName !== undefined) {
+      set.fullName = patch.fullName.trim();
+    }
+    if (Object.keys(set).length === 0) {
+      return this.findById(userId);
+    }
+    return this.userModel
+      .findByIdAndUpdate(userId, { $set: set }, { new: true })
+      .exec();
+  }
 }

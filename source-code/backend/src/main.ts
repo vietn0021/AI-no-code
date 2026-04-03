@@ -1,16 +1,34 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const uploadsRoot = join(process.cwd(), 'uploads');
+  if (!existsSync(uploadsRoot)) {
+    mkdirSync(uploadsRoot, { recursive: true });
+  }
 
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  const corsOrigin = 'http://localhost:5173';
   app.enableCors({
-    origin: 'http://localhost:5173',
+    origin: corsOrigin,
     credentials: true,
+  });
+
+  // CORS trước static; thêm setHeaders để mọi response /uploads (kể cả 304) có header CORS cho XHR Phaser.
+  app.useStaticAssets(uploadsRoot, {
+    prefix: '/uploads/',
+    setHeaders: (res) => {
+      res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    },
   });
   
   app.setGlobalPrefix('api');

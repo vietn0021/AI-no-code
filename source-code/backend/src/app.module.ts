@@ -1,4 +1,4 @@
-﻿import { Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -8,6 +8,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ProjectVersionsModule } from './modules/project-versions/project-versions.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { PromptsModule } from './modules/prompts/prompts.module';
+import { TemplatesModule } from './modules/templates/templates.module';
 import { UsersModule } from './modules/users/users.module';
 import { DatabaseModule } from './providers/database/database.module';
 
@@ -25,6 +26,7 @@ import { DatabaseModule } from './providers/database/database.module';
     AssetsModule,
     PromptsModule,
     AiEngineModule,
+    TemplatesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -94,3 +94,11 @@ Danh sach hinh dang co ban can ho tro:
 - Neu prompt xung dot mau (vi du vua "lavender" vua "#00FF00"), uu tien gia tri cu the hon.
 - Can log ro nguon mau duoc chon:
   - `source = prompt` hoac `source = palette_fallback`.
+
+---
+
+## 6) Upload file & phục vụ tĩnh (Studio / Phaser)
+
+- **POST** `/api/assets/upload?projectId=...` — `multipart/form-data`, field **`file`**; ảnh PNG/JPEG/GIF/WebP, giới hạn kích thước (xem `asset-upload.options.ts`). JWT bắt buộc.
+- File lưu dưới thư mục `uploads/` trên server; **`main.ts`** mount static **`/uploads/`** với CORS cho frontend dev (`http://localhost:5173`).
+- Entity trong `gameConfig` có thể dùng **`assetUrl`** dạng `/uploads/...` — Phaser Play (`GameRuntime` / `BehaviorRuntime`) resolve sang origin backend (port **3001**).
