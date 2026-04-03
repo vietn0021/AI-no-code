@@ -1,4 +1,5 @@
-import { api, API_BASE_URL } from '../lib/api'
+import { api } from '../lib/api'
+import { backendOrigin } from '../lib/apiClient'
 
 export type UploadAssetResult = {
   url: string
@@ -27,9 +28,9 @@ export async function fetchProjectAssets(projectId: string): Promise<ProjectAsse
   return data.data
 }
 
-/** Origin backend (bỏ hậu tố `/api`) — ghép với đường dẫn `/uploads/...` từ API. */
+/** Origin backend — ghép với đường dẫn `/uploads/...` từ API. */
 export function uploadsOrigin(): string {
-  return API_BASE_URL.replace(/\/api\/?$/, '')
+  return backendOrigin()
 }
 
 export function resolveAssetFileUrl(relativeOrAbsolute: string): string {

@@ -1,6 +1,7 @@
 import axios, { type AxiosError } from 'axios'
+import { apiUrl } from './apiClient'
 
-export const API_BASE_URL = 'http://localhost:3001/api'
+export const API_BASE_URL = apiUrl('/api')
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:3001/api'
+import { apiUrl } from '../lib/apiClient'
 
 type ApiErrorPayload = {
   success?: boolean
@@ -29,7 +29,7 @@ async function parseError(response: Response): Promise<string> {
 }
 
 export async function loginApi(email: string, password: string): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+  const response = await fetch(apiUrl('/api/auth/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -48,7 +48,7 @@ export async function registerApi(payload: {
   email: string
   password: string
 }): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+  const response = await fetch(apiUrl('/api/auth/register'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -60,7 +60,7 @@ export async function registerApi(payload: {
 }
 
 export async function forgotPasswordApi(email: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+  const response = await fetch(apiUrl('/api/auth/forgot-password'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
@@ -83,7 +83,7 @@ export async function resetPasswordApi(payload: {
   token: string
   password: string
 }): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+  const response = await fetch(apiUrl('/api/auth/reset-password'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
