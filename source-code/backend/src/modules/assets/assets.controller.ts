@@ -34,7 +34,11 @@ export class AssetsController {
 
   @Get()
   @ApiOperation({ summary: 'Danh sách asset theo project' })
-  @ApiQuery({ name: 'projectId', required: true, description: 'Mongo ObjectId project' })
+  @ApiQuery({
+    name: 'projectId',
+    required: true,
+    description: 'Mongo ObjectId project',
+  })
   list(
     @Query('projectId') projectId: string,
     @CurrentUser() user: { sub: string } | undefined,
@@ -51,7 +55,11 @@ export class AssetsController {
   @Post('upload')
   @ApiOperation({ summary: 'Upload ảnh (PNG/JPEG/GIF/WebP, tối đa 5MB)' })
   @ApiConsumes('multipart/form-data')
-  @ApiQuery({ name: 'projectId', required: true, description: 'Mongo ObjectId project' })
+  @ApiQuery({
+    name: 'projectId',
+    required: true,
+    description: 'Mongo ObjectId project',
+  })
   @ApiBody({
     schema: {
       type: 'object',

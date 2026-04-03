@@ -14,7 +14,9 @@ export type UploadAssetResult = {
 
 @Injectable()
 export class AssetsService {
-  constructor(@InjectModel(Asset.name) private readonly assetModel: Model<AssetDocument>) {}
+  constructor(
+    @InjectModel(Asset.name) private readonly assetModel: Model<AssetDocument>,
+  ) {}
 
   async create(dto: CreateAssetDto): Promise<AssetDocument> {
     const doc = new this.assetModel({

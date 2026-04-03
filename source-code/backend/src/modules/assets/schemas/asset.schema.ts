@@ -13,7 +13,12 @@ export type AssetDocument = HydratedDocument<Asset>;
 
 @Schema({ timestamps: true, collection: 'assets' })
 export class Asset {
-  @Prop({ type: Types.ObjectId, ref: Project.name, required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: Project.name,
+    required: true,
+    index: true,
+  })
   projectId!: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: User.name, required: true })

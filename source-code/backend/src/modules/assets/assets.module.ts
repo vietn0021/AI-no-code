@@ -5,7 +5,9 @@ import { AssetsService } from './assets.service';
 import { Asset, AssetSchema } from './schemas/asset.schema';
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: Asset.name, schema: AssetSchema }])],
+  imports: [
+    MongooseModule.forFeature([{ name: Asset.name, schema: AssetSchema }]),
+  ],
   controllers: [AssetsController],
   providers: [AssetsService],
   exports: [MongooseModule, AssetsService],
