@@ -49,7 +49,7 @@ Hệ thống đang theo mô hình module-based + layered:
 | `ProjectsModule`        | Nghiệp vụ project + generate + rollback + versioning  | `ProjectsController`, `ProjectsService`, `ProjectsRepository`, `ProjectOwnerGuard` |
 | `ProjectVersionsModule` | API tạo snapshot trực tiếp                            | `ProjectVersionsController`, `ProjectVersionsService`                              |
 | `AssetsModule`          | Lưu metadata asset                                    | `AssetsController`, `AssetsService`                                                |
-| `PromptsModule`         | Log prompt/response AI                                | `PromptsController`, `PromptsService`                                              |
+| `PromptsModule`         | Lịch sử chat AI theo project (`user` / `assistant`)   | `PromptsController`, `PromptsService`, `Prompt` schema collection `prompts`        |
 | `AiEngineModule`        | Gọi LLM (Groq nếu có `GROQ_API_KEY`, không thì Gemini), parse/normalize/validate game config | `AiEngineController`, `AiEngineService`                                            |
 | `DatabaseModule`        | Kết nối DB + logging + global mongoose JSON transform | `MongooseModule.forRootAsync`, `DatabaseLoggerService`                             |
 
@@ -305,15 +305,23 @@ sequenceDiagram
 
 ### 5.1 Quan hệ chính
 
+Có **5 collection** chính (ngoài các index phụ): `users`, `projects`, `project_versions`, `assets`, `prompts`.
+
 - `User (1) -> (n) Project` qua `Project.userId`.
 - `Project (1) -> (n) ProjectVersion` qua `ProjectVersion.projectId`.
+- `Project (1) -> (n) Asset` qua `Asset.projectId`; `Asset.uploadedBy` tham chiếu `User`.
+- `Project (1) -> (n) Prompt` qua `Prompt.projectId`; `Prompt.userId` tham chiếu `User` (lịch sử chat AI theo dự án: tin `user` / `assistant`).
 
 ### 5.2 Mermaid ER Diagram
 
 ```mermaid
 erDiagram
   USER ||--o{ PROJECT : owns
+  USER ||--o{ ASSET : uploads
+  USER ||--o{ PROMPT : authors
   PROJECT ||--o{ PROJECT_VERSION : snapshots
+  PROJECT ||--o{ ASSET : contains
+  PROJECT ||--o{ PROMPT : thread
 
   USER {
     ObjectId _id
@@ -344,6 +352,28 @@ erDiagram
     object snapshot
     string changeSource
     ObjectId createdBy
+    date createdAt
+    date updatedAt
+  }
+
+  ASSET {
+    ObjectId _id
+    ObjectId projectId
+    ObjectId uploadedBy
+    string fileName
+    string fileUrl
+    string fileType
+    number fileSize
+    date createdAt
+    date updatedAt
+  }
+
+  PROMPT {
+    ObjectId _id
+    ObjectId projectId
+    ObjectId userId
+    string role
+    string content
     date createdAt
     date updatedAt
   }
