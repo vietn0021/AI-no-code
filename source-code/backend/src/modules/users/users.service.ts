@@ -14,7 +14,8 @@ export class UsersService {
   }
 
   findByEmail(email: string, includePassword = false): Promise<UserDocument | null> {
-    const query = this.userModel.findOne({ email: email.toLowerCase().trim() });
+    const normalized = email.toLowerCase().trim();
+    const query = this.userModel.findOne({ email: normalized }).read('primary');
     if (includePassword) query.select('+password');
     return query.exec();
   }
@@ -27,6 +28,7 @@ export class UsersService {
   findForPasswordReset(email: string): Promise<UserDocument | null> {
     return this.userModel
       .findOne({ email: email.toLowerCase().trim() })
+      .read('primary')
       .select('+password +passwordResetTokenHash +passwordResetExpires')
       .exec();
   }

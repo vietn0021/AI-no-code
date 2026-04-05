@@ -12,7 +12,7 @@ export class DatabaseLoggerService implements OnModuleInit {
     const conn = this.connection;
 
     const logSuccess = () => {
-      this.logger.log('🚀 Database connected successfully to MongoDB Atlas');
+      this.logger.log('MongoDB connected');
     };
 
     if (conn.readyState === 1) {
@@ -23,7 +23,7 @@ export class DatabaseLoggerService implements OnModuleInit {
 
     conn.on('error', (err: Error) => {
       this.logger.error(
-        '❌ Database connection failed',
+        'Database connection failed',
         err?.stack ?? err?.message ?? String(err),
       );
       process.exit(1);

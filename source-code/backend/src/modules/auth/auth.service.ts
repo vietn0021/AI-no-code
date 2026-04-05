@@ -37,17 +37,29 @@ export class AuthService {
       throw new ConflictException('Email already exists');
     }
 
-    const created = await this.usersService.create({
-      email,
-      password: dto.password,
-      fullName: dto.fullName,
-    });
+    try {
+      const created = await this.usersService.create({
+        email,
+        password: dto.password,
+        fullName: dto.fullName,
+      });
 
-    return {
-      id: String(created._id),
-      email: created.email,
-      fullName: created.fullName,
-    };
+      return {
+        id: String(created._id),
+        email: created.email,
+        fullName: created.fullName,
+      };
+    } catch (e: unknown) {
+      const code =
+        typeof e === 'object' && e !== null && 'code' in e
+          ? (e as { code: unknown }).code
+          : undefined;
+      if (code === 11000) {
+        throw new ConflictException('Email already exists');
+      }
+      this.logger.error('register failed', e instanceof Error ? e.stack : String(e));
+      throw e;
+    }
   }
 
   async login(dto: LoginDto) {
@@ -88,7 +100,9 @@ export class AuthService {
       email: user.email,
       fullName: user.fullName,
       createdAt:
-        user.createdAt != null ? new Date(user.createdAt).toISOString() : undefined,
+        user.createdAt != null
+          ? new Date(user.createdAt).toISOString()
+          : undefined,
     };
   }
 
@@ -104,7 +118,9 @@ export class AuthService {
       email: user.email,
       fullName: user.fullName,
       createdAt:
-        user.createdAt != null ? new Date(user.createdAt).toISOString() : undefined,
+        user.createdAt != null
+          ? new Date(user.createdAt).toISOString()
+          : undefined,
     };
   }
 
@@ -112,7 +128,9 @@ export class AuthService {
    * Does not reveal whether the email is registered (timing-safe UX).
    * Stores SHA-256 of a random token; plain token is only logged in development when configured.
    */
-  async forgotPassword(dto: ForgotPasswordDto): Promise<typeof FORGOT_PASSWORD_RESPONSE> {
+  async forgotPassword(
+    dto: ForgotPasswordDto,
+  ): Promise<typeof FORGOT_PASSWORD_RESPONSE> {
     const email = dto.email.toLowerCase().trim();
     const user = await this.usersService.findByEmail(email);
 
@@ -122,15 +140,26 @@ export class AuthService {
       const minutes = Number(
         this.configService.get<string>('PASSWORD_RESET_EXPIRES_MIN', '60'),
       );
-      const expiresMs = Number.isFinite(minutes) && minutes > 0 ? minutes * 60_000 : 60 * 60_000;
+      const expiresMs =
+        Number.isFinite(minutes) && minutes > 0
+          ? minutes * 60_000
+          : 60 * 60_000;
       const expiresAt = new Date(Date.now() + expiresMs);
 
-      await this.usersService.setPasswordResetToken(email, tokenHash, expiresAt);
+      await this.usersService.setPasswordResetToken(
+        email,
+        tokenHash,
+        expiresAt,
+      );
 
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL', '').replace(/\/$/, '');
+      const frontendUrl = this.configService
+        .get<string>('FRONTEND_URL', '')
+        .replace(/\/$/, '');
       const logResetInDev =
-        this.configService.get<string>('NODE_ENV', 'development') !== 'production' &&
-        this.configService.get<string>('PASSWORD_RESET_LOG_LINK', 'false') === 'true';
+        this.configService.get<string>('NODE_ENV', 'development') !==
+          'production' &&
+        this.configService.get<string>('PASSWORD_RESET_LOG_LINK', 'false') ===
+          'true';
 
       if (logResetInDev && frontendUrl) {
         const link = `${frontendUrl}/auth/reset-password?token=${rawToken}&email=${encodeURIComponent(email)}`;
@@ -152,11 +181,7 @@ export class AuthService {
     const email = dto.email.toLowerCase().trim();
     const user = await this.usersService.findForPasswordReset(email);
 
-    if (
-      !user ||
-      !user.passwordResetTokenHash ||
-      !user.passwordResetExpires
-    ) {
+    if (!user || !user.passwordResetTokenHash || !user.passwordResetExpires) {
       throw new BadRequestException('Invalid or expired reset token');
     }
 

@@ -33,6 +33,8 @@ applyMongooseGlobalSchemaDefaults();
         uri: config.getOrThrow<string>('MONGODB_URI'),
         dbName: config.get<string>('DB_NAME', 'ai-nocode-studio'),
         autoIndex: process.env.NODE_ENV !== 'production',
+        /** Tránh findByEmail null trên secondary lag rồi insert E11000 trên primary. */
+        readPreference: 'primary' as const,
       }),
       inject: [ConfigService],
     }),
