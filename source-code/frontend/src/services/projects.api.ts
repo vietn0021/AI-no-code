@@ -114,6 +114,8 @@ export type ProjectWithGameConfig = Project & {
   rawPrompt?: string
   status?: string
   currentVersion?: number
+  isPublished?: boolean
+  slug?: string
 }
 
 function mapProjectWithGameConfig(raw: Record<string, unknown>): ProjectWithGameConfig {
@@ -124,6 +126,8 @@ function mapProjectWithGameConfig(raw: Record<string, unknown>): ProjectWithGame
     status: typeof raw.status === 'string' ? raw.status : undefined,
     currentVersion:
       typeof raw.currentVersion === 'number' ? raw.currentVersion : undefined,
+    isPublished: raw.isPublished === true,
+    slug: typeof raw.slug === 'string' && raw.slug.trim() ? raw.slug.trim() : undefined,
   }
 }
 

@@ -8,6 +8,7 @@ import { Link, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
+  ExternalLink,
   Layers,
   MessageSquare,
   PanelLeftClose,
@@ -19,6 +20,7 @@ import {
   Sparkles,
   Undo2,
   UserRound,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { cn } from "../../lib/utils";
@@ -28,12 +30,18 @@ import { AiChatPanel } from "./AiChatPanel";
 import { EditorRightColumn } from "./components/EditorRightColumn";
 import { GameCanvas } from "./components/GameCanvas";
 import { GameRuntime } from "./components/GameRuntime";
+import { getApiErrorMessage } from "../../lib/api";
 import {
   fetchProjectById,
   normalizeGameConfigForEditor,
   patchProjectGameConfig,
   patchProjectPartial,
 } from "../../services/projects.api";
+import {
+  getPublicPlayUrl,
+  publishProject,
+  unpublishProject,
+} from "../../services/publish.api";
 import { confirmEntityDelete } from "./lib/confirmEntityDelete";
 
 const panelEase = [0.22, 1, 0.36, 1] as const;
@@ -51,6 +59,9 @@ export function EditorPage() {
   const historyIndex = useEditorStore((s) => s.historyIndex);
   const undo = useEditorStore((s) => s.undo);
   const redo = useEditorStore((s) => s.redo);
+  const isPublished = useEditorStore((s) => s.isPublished);
+  const publishSlug = useEditorStore((s) => s.publishSlug);
+  const setPublishState = useEditorStore((s) => s.setPublishState);
 
   const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
@@ -93,6 +104,10 @@ export function EditorPage() {
           name: project.name?.trim() || undefined,
           description: project.description,
         });
+        setPublishState({
+          isPublished: project.isPublished === true,
+          publishSlug: project.slug?.trim() || null,
+        });
         if (project.gameConfig != null) {
           setGameConfig(normalizeGameConfigForEditor(project.gameConfig));
           setSelectedEntityId(null);
@@ -105,7 +120,13 @@ export function EditorPage() {
     }
 
     void load();
-  }, [projectId, setCurrentProject, setGameConfig, setSelectedEntityId]);
+  }, [
+    projectId,
+    setCurrentProject,
+    setGameConfig,
+    setSelectedEntityId,
+    setPublishState,
+  ]);
 
   async function commitProjectRename() {
     if (!projectId) return;
@@ -174,6 +195,69 @@ export function EditorPage() {
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [canvasMode, setCanvasMode] = useState<"preview" | "play">("preview");
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isUnpublishing, setIsUnpublishing] = useState(false);
+
+  const sharePlayUrl =
+    publishSlug != null && publishSlug.length > 0
+      ? getPublicPlayUrl(publishSlug)
+      : "";
+
+  async function onPublishClick() {
+    if (!projectId) {
+      toast.error("Thiếu projectId trên URL.");
+      return;
+    }
+    setIsPublishing(true);
+    try {
+      const result = await publishProject(projectId);
+      setPublishState({
+        isPublished: true,
+        publishSlug: result.slug,
+      });
+      toast.success("Game đã được publish!");
+      setPublishModalOpen(true);
+    } catch (e) {
+      toast.error(getApiErrorMessage(e));
+    } finally {
+      setIsPublishing(false);
+    }
+  }
+
+  async function onUnpublishClick() {
+    if (!projectId) return;
+    setIsUnpublishing(true);
+    try {
+      await unpublishProject(projectId);
+      setPublishState({
+        isPublished: false,
+        publishSlug,
+      });
+      toast.success("Đã gỡ publish.");
+    } catch (e) {
+      toast.error(getApiErrorMessage(e));
+    } finally {
+      setIsUnpublishing(false);
+    }
+  }
+
+  function copyShareLink() {
+    if (!sharePlayUrl) return;
+    void navigator.clipboard.writeText(sharePlayUrl).then(
+      () => toast.success("Đã copy link."),
+      () => toast.error("Không copy được link."),
+    );
+  }
+
+  useEffect(() => {
+    if (!publishModalOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setPublishModalOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [publishModalOpen]);
 
   // Ctrl+Z / Ctrl+Y (Cmd trên macOS): undo / redo — không áp dụng khi focus trong input.
   useEffect(() => {
@@ -358,6 +442,54 @@ export function EditorPage() {
             className="mx-0.5 hidden h-7 w-px shrink-0 bg-gradient-to-b from-transparent via-slate-300/80 to-transparent sm:block"
             aria-hidden
           />
+          {!isPublished ? (
+            <button
+              type="button"
+              disabled={
+                isFetchingProject || isPublishing || !projectId
+              }
+              onClick={() => void onPublishClick()}
+              className={cn(
+                "shrink-0 rounded-xl border border-emerald-400/50 bg-gradient-to-b from-emerald-400 to-emerald-600 px-3 py-2 text-sm font-bold text-white shadow-md",
+                "transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60",
+                "disabled:pointer-events-none disabled:opacity-45",
+              )}
+            >
+              {isPublishing ? "…" : "🚀 Publish"}
+            </button>
+          ) : (
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+              <span className="rounded-full border border-emerald-300/60 bg-emerald-100/90 px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-wide text-emerald-900 shadow-sm backdrop-blur-sm">
+                Published
+              </span>
+              <button
+                type="button"
+                title="Copy link"
+                aria-label="Copy link chia sẻ"
+                disabled={!sharePlayUrl}
+                onClick={copyShareLink}
+                className={cn(
+                  "flex h-9 min-w-[2.25rem] items-center justify-center rounded-xl border border-white/60 bg-white/55 text-base shadow-sm backdrop-blur-sm transition",
+                  "hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-dark/30",
+                  "disabled:pointer-events-none disabled:opacity-40",
+                )}
+              >
+                📋
+              </button>
+              <button
+                type="button"
+                disabled={isUnpublishing || !projectId}
+                onClick={() => void onUnpublishClick()}
+                className={cn(
+                  "rounded-lg px-2 py-1 text-[0.7rem] font-semibold text-red-600 underline-offset-2 transition",
+                  "hover:text-red-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40",
+                  "disabled:pointer-events-none disabled:opacity-45",
+                )}
+              >
+                {isUnpublishing ? "…" : "Unpublish"}
+              </button>
+            </div>
+          )}
           <PastelButton
             variant="secondary"
             size="sm"
@@ -568,6 +700,102 @@ export function EditorPage() {
           </div>
         </motion.aside>
       </div>
+
+      <AnimatePresence>
+        {publishModalOpen ? (
+          <motion.div
+            key="publish-modal-root"
+            className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22, ease: panelEase }}
+          >
+            <motion.button
+              type="button"
+              aria-label="Đóng"
+              className="absolute inset-0 bg-slate-900/45 backdrop-blur-[6px]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setPublishModalOpen(false)}
+            />
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="publish-modal-title"
+              className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-white/65 bg-gradient-to-b from-white via-white to-sky-light/25 shadow-[0_28px_72px_-16px_rgba(15,23,42,0.35)] ring-1 ring-sky-dark/[0.08]"
+              initial={{ opacity: 0, scale: 0.92, y: 22 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 14 }}
+              transition={{
+                type: "spring",
+                stiffness: 400,
+                damping: 32,
+                mass: 0.85,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-white/50 bg-white/50 px-5 py-4 backdrop-blur-md">
+                <div>
+                  <p
+                    id="publish-modal-title"
+                    className="font-display text-lg font-bold tracking-tight text-slate-800"
+                  >
+                    Chia sẻ game
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Chia sẻ game của bạn:
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Đóng hộp thoại"
+                  onClick={() => setPublishModalOpen(false)}
+                  className="rounded-xl p-2 text-slate-500 transition hover:bg-white/80 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-dark/25"
+                >
+                  <X className="h-5 w-5" strokeWidth={2} aria-hidden />
+                </button>
+              </div>
+              <div className="space-y-4 px-5 py-5">
+                <p className="break-all rounded-xl border border-sky-dark/10 bg-white/70 px-3.5 py-3 font-mono text-[0.8rem] leading-relaxed text-slate-800 shadow-inner">
+                  {sharePlayUrl || "—"}
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={copyShareLink}
+                    disabled={!sharePlayUrl}
+                    className={cn(
+                      "inline-flex items-center justify-center gap-2 rounded-xl border border-sky-dark/20 bg-white/80 px-4 py-2.5 text-sm font-semibold text-sky-dark shadow-sm transition",
+                      "hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-dark/30",
+                      "disabled:pointer-events-none disabled:opacity-40",
+                    )}
+                  >
+                    Copy link
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!sharePlayUrl}
+                    onClick={() => {
+                      if (sharePlayUrl) window.open(sharePlayUrl, "_blank", "noopener,noreferrer");
+                    }}
+                    className={cn(
+                      "inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-gradient-to-b from-emerald-400 to-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition",
+                      "hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50",
+                      "disabled:pointer-events-none disabled:opacity-40",
+                    )}
+                  >
+                    <ExternalLink className="h-4 w-4" aria-hidden />
+                    Mở trong tab mới
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

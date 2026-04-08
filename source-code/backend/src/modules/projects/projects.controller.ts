@@ -83,4 +83,18 @@ export class ProjectsController {
   rollback(@Param('id') id: string, @Body() dto: RollbackProjectDto) {
     return this.projectsService.rollback(id, dto);
   }
+
+  @Post(':id/publish')
+  @UseGuards(ProjectOwnerGuard)
+  @ApiOperation({ summary: 'Publish project (slug + public play URL)' })
+  publish(@Param('id') id: string) {
+    return this.projectsService.publish(id);
+  }
+
+  @Post(':id/unpublish')
+  @UseGuards(ProjectOwnerGuard)
+  @ApiOperation({ summary: 'Unpublish project' })
+  unpublish(@Param('id') id: string) {
+    return this.projectsService.unpublish(id);
+  }
 }

@@ -22,6 +22,10 @@ export class ProjectsRepository {
     return this.projectModel.findById(id).exec();
   }
 
+  findBySlug(slug: string): Promise<ProjectDocument | null> {
+    return this.projectModel.findOne({ slug }).exec();
+  }
+
   findByUserId(userId: Types.ObjectId): Promise<ProjectDocument[]> {
     return this.projectModel.find({ userId }).sort({ updatedAt: -1 }).exec();
   }

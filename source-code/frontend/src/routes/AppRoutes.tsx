@@ -6,6 +6,7 @@ import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '../pages/auth/ResetPasswordPage'
 import { DashboardPage } from '../pages/dashboard/DashboardPage'
 import { SettingsPage } from '../pages/settings/SettingsPage'
+import { PlayPage } from '../pages/play/PlayPage'
 import { EditorPage } from '../pages/studio/EditorPage'
 import { TemplatesPage } from '../pages/templates/TemplatesPage'
 import { PrivateRoute } from './PrivateRoute'
@@ -21,6 +22,8 @@ export function AppRoutes() {
         <Route path="/auth/register" element={<RegisterPage />} />
         <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+
+        <Route path="/play/:slug" element={<PlayPage />} />
 
         <Route element={<PrivateRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />

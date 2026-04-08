@@ -3,9 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectConnection } from '@nestjs/mongoose';
+import { randomBytes } from 'crypto';
+import { MongoServerError } from 'mongodb';
 import type { ClientSession } from 'mongoose';
 import { Connection, Types } from 'mongoose';
+import slugify from 'slugify';
 import { AiEngineService } from '../ai-engine/ai-engine.service';
 import { GAME_TEMPLATES } from '../templates/templates.service';
 import { VersionChangeSource } from '../project-versions/schemas/project-version.schema';
@@ -38,6 +42,7 @@ export class ProjectsService {
   constructor(
     private readonly projectsRepository: ProjectsRepository,
     private readonly aiEngineService: AiEngineService,
+    private readonly configService: ConfigService,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
@@ -328,5 +333,70 @@ export class ProjectsService {
     }
 
     return this.projectsRepository.findById(oid);
+  }
+
+  private buildPublishUrl(slug: string): string {
+    const base = this.configService
+      .get<string>('FRONTEND_URL', '')
+      .replace(/\/$/, '');
+    return base ? `${base}/play/${slug}` : `/play/${slug}`;
+  }
+
+  async publish(id: string) {
+    const oid = this.assertObjectId(id);
+    const maxAttempts = 8;
+    for (let a = 0; a < maxAttempts; a++) {
+      const project = await this.projectsRepository.findById(oid);
+      if (!project) throw new NotFoundException('Project not found');
+
+      let slug = project.slug?.trim() || '';
+      const update: Partial<Project> = {
+        isPublished: true,
+        publishedAt: new Date(),
+      };
+
+      if (!slug) {
+        const base =
+          slugify(project.name, { lower: true, strict: true, trim: true }) ||
+          'game';
+        slug = `${base}-${randomBytes(4).toString('hex')}`;
+        update.slug = slug;
+      }
+
+      try {
+        const updated = await this.projectsRepository.updateById(oid, update);
+        if (!updated) throw new NotFoundException('Project not found');
+        return { slug, publishUrl: this.buildPublishUrl(slug) };
+      } catch (e) {
+        if (
+          e instanceof MongoServerError &&
+          e.code === 11000 &&
+          !project.slug?.trim()
+        ) {
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new BadRequestException('Could not assign unique slug');
+  }
+
+  async unpublish(id: string) {
+    const oid = this.assertObjectId(id);
+    const project = await this.projectsRepository.findById(oid);
+    if (!project) throw new NotFoundException('Project not found');
+    await this.projectsRepository.updateById(oid, { isPublished: false });
+    return { success: true };
+  }
+
+  async findPublishedGameConfigBySlug(slug: string) {
+    const project = await this.projectsRepository.findBySlug(slug);
+    if (!project?.isPublished) {
+      throw new NotFoundException('Project not found');
+    }
+    return {
+      gameConfig: project.gameConfig ?? {},
+      name: project.name?.trim() || 'Game',
+    };
   }
 }

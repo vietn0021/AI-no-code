@@ -33,9 +33,20 @@ export class Project {
 
   @Prop({ enum: ProjectStatus, default: ProjectStatus.Draft, index: true })
   status!: ProjectStatus;
+
+  @Prop({ default: false, index: true })
+  isPublished!: boolean;
+
+  @Prop({ type: Date })
+  publishedAt?: Date;
+
+  /** URL-friendly, unique khi đã gán (sparse index). */
+  @Prop({ trim: true })
+  slug?: string;
 }
 
 export const ProjectSchema = SchemaFactory.createForClass(Project);
 
 ProjectSchema.index({ userId: 1, status: 1 });
 ProjectSchema.index({ userId: 1, createdAt: -1 });
+ProjectSchema.index({ slug: 1 }, { unique: true, sparse: true });

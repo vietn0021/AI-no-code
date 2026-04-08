@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import Phaser from 'phaser'
 import { cn } from '../../../lib/utils'
-import { useEditorStore, type GameEntity } from '../../../store/useEditorStore'
+import {
+  useEditorStore,
+  type EditorGameConfig,
+  type GameEntity,
+} from '../../../store/useEditorStore'
 import {
   normalizeShape,
   resolveEntityColor,
@@ -25,6 +29,8 @@ import {
 
 type GameRuntimeProps = {
   className?: string
+  /** Khi có — dùng thay cho `useEditorStore` (ví dụ trang `/play/:slug`). */
+  gameConfig?: EditorGameConfig
 }
 
 function hexToPhaserColor(hex: string | undefined, fallback: number): number {
@@ -401,13 +407,14 @@ function buildRuntimeScene(PhaserRef: typeof Phaser): typeof Phaser.Scene {
 }
 
 /**
- * Chế độ Play: Phaser 3 Arcade — đọc `gameConfig` từ store (không đổi `useEditorStore`).
+ * Chế độ Play: Phaser 3 Arcade — `gameConfig` từ prop hoặc store.
  * Player: `type === "player"` + WASD/mũi tên; còn lại: static body va chạm.
  */
-export function GameRuntime({ className }: GameRuntimeProps) {
+export function GameRuntime({ className, gameConfig: gameConfigProp }: GameRuntimeProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const gameRef = useRef<Phaser.Game | null>(null)
-  const gameConfig = useEditorStore((s) => s.gameConfig)
+  const gameConfigFromStore = useEditorStore((s) => s.gameConfig)
+  const gameConfig = gameConfigProp ?? gameConfigFromStore
 
   const [size, setSize] = useState({ w: 0, h: 0 })
 
@@ -602,7 +609,15 @@ export function GameRuntime({ className }: GameRuntimeProps) {
       game.destroy(true)
       gameRef.current = null
     }
-  }, [size.w, size.h, configKey, bgHex, templateIdRaw, isTemplateRuntime])
+  }, [
+    size.w,
+    size.h,
+    configKey,
+    bgHex,
+    templateIdRaw,
+    isTemplateRuntime,
+    useBehaviorRuntime,
+  ])
 
   return (
     <div

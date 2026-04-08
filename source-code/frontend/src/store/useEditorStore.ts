@@ -88,6 +88,9 @@ type EditorState = {
   gameConfig: EditorGameConfig
   currentProject: CurrentProject | null
   isLoading: boolean
+  /** Trạng thái publish (đồng bộ với backend khi tải / publish / unpublish). */
+  isPublished: boolean
+  publishSlug: string | null
   /** Entity đang chọn — đồng bộ Canvas + Layers + Inspector. */
   selectedEntityId: string | null
   history: EditorGameConfig[]
@@ -107,6 +110,7 @@ type EditorState = {
   redo: () => void
   /** Gắn / gỡ template runtime (snake, flappy, …) trên gameConfig hiện tại. */
   setTemplateId: (id: string | null) => void
+  setPublishState: (state: { isPublished: boolean; publishSlug: string | null }) => void
 }
 
 function applyHistoryAfterMutation(
@@ -132,6 +136,8 @@ export const useEditorStore = create<EditorState>((set) => ({
   gameConfig: mockGameConfig,
   currentProject: null,
   isLoading: false,
+  isPublished: false,
+  publishSlug: null,
   selectedEntityId: null,
   history: [],
   historyIndex: -1,
@@ -227,5 +233,11 @@ export const useEditorStore = create<EditorState>((set) => ({
         nextGameConfig.templateId = nextId
       }
       return applyHistoryAfterMutation(state, nextGameConfig)
+    }),
+
+  setPublishState: (next) =>
+    set({
+      isPublished: next.isPublished,
+      publishSlug: next.publishSlug,
     }),
 }))
