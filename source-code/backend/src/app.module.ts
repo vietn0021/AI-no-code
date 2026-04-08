@@ -11,6 +11,7 @@ import { PromptsModule } from './modules/prompts/prompts.module';
 import { TemplatesModule } from './modules/templates/templates.module';
 import { UsersModule } from './modules/users/users.module';
 import { DatabaseModule } from './providers/database/database.module';
+import { SupabaseModule } from './providers/supabase/supabase.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { DatabaseModule } from './providers/database/database.module';
       envFilePath: ['.env', '.env.local'],
     }),
     DatabaseModule,
+    SupabaseModule,
     AuthModule,
     UsersModule,
     ProjectsModule,

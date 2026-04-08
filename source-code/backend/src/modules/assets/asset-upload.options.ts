@@ -1,7 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
+import { memoryStorage } from 'multer';
+import { join } from 'path';
 
 const ALLOWED_MIME = new Set([
   'image/png',
@@ -10,6 +9,7 @@ const ALLOWED_MIME = new Set([
   'image/webp',
 ]);
 
+/** Giữ path cho static `/uploads` (main.ts) — file mới lên Supabase, không ghi disk. */
 export const ASSET_IMAGE_UPLOAD_DIR = join(process.cwd(), 'uploads');
 
 export const assetImageMulterOptions = {
@@ -30,13 +30,5 @@ export const assetImageMulterOptions = {
     }
     cb(null, true);
   },
-  storage: diskStorage({
-    destination: (_req, _file, cb) => {
-      cb(null, ASSET_IMAGE_UPLOAD_DIR);
-    },
-    filename: (_req, file, cb) => {
-      const ext = extname(file.originalname).toLowerCase() || '.bin';
-      cb(null, `${randomUUID()}${ext}`);
-    },
-  }),
+  storage: memoryStorage(),
 };

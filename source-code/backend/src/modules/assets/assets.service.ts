@@ -1,6 +1,9 @@
+import { randomUUID } from 'crypto';
+import { extname } from 'path';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { SupabaseService } from '../../providers/supabase/supabase.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { Asset, AssetDocument, AssetFileType } from './schemas/asset.schema';
 
@@ -16,6 +19,7 @@ export type UploadAssetResult = {
 export class AssetsService {
   constructor(
     @InjectModel(Asset.name) private readonly assetModel: Model<AssetDocument>,
+    private readonly supabaseService: SupabaseService,
   ) {}
 
   async create(dto: CreateAssetDto): Promise<AssetDocument> {
@@ -39,11 +43,23 @@ export class AssetsService {
       throw new BadRequestException('userId không hợp lệ');
     }
 
-    const url = `/uploads/${file.filename}`;
+    if (!file.buffer?.length) {
+      throw new BadRequestException('Thiếu nội dung file');
+    }
+
+    const ext = extname(file.originalname).toLowerCase() || '.bin';
+    const filename = `${randomUUID()}${ext}`;
+    const buffer = Buffer.from(file.buffer);
+    const url = await this.supabaseService.uploadFile(
+      buffer,
+      filename,
+      file.mimetype,
+    );
+
     const doc = new this.assetModel({
       projectId: new Types.ObjectId(projectId),
       uploadedBy: new Types.ObjectId(userId),
-      fileName: file.filename,
+      fileName: filename,
       fileUrl: url,
       fileType: AssetFileType.Image,
       fileSize: file.size,

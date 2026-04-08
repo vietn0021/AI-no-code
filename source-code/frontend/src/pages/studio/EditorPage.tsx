@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+import { Link, useParams } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
   Layers,
@@ -14,208 +19,217 @@ import {
   Sparkles,
   Undo2,
   UserRound,
-} from 'lucide-react'
-import toast from 'react-hot-toast'
-import { cn } from '../../lib/utils'
-import { PastelButton } from '../../components/shared'
-import { useEditorStore } from '../../store/useEditorStore'
-import { AiChatPanel } from './AiChatPanel'
-import { EditorRightColumn } from './components/EditorRightColumn'
-import { GameCanvas } from './components/GameCanvas'
-import { GameRuntime } from './components/GameRuntime'
+} from "lucide-react";
+import toast from "react-hot-toast";
+import { cn } from "../../lib/utils";
+import { PastelButton } from "../../components/shared";
+import { useEditorStore } from "../../store/useEditorStore";
+import { AiChatPanel } from "./AiChatPanel";
+import { EditorRightColumn } from "./components/EditorRightColumn";
+import { GameCanvas } from "./components/GameCanvas";
+import { GameRuntime } from "./components/GameRuntime";
 import {
   fetchProjectById,
   normalizeGameConfigForEditor,
   patchProjectGameConfig,
   patchProjectPartial,
-} from '../../services/projects.api'
-import { confirmEntityDelete } from './lib/confirmEntityDelete'
+} from "../../services/projects.api";
+import { confirmEntityDelete } from "./lib/confirmEntityDelete";
 
-const panelEase = [0.22, 1, 0.36, 1] as const
-const panelTransition = { duration: 0.4, ease: panelEase }
+const panelEase = [0.22, 1, 0.36, 1] as const;
+const panelTransition = { duration: 0.4, ease: panelEase };
 
 export function EditorPage() {
-  const { projectId } = useParams()
-  const setCurrentProject = useEditorStore((s) => s.setCurrentProject)
-  const currentProject = useEditorStore((s) => s.currentProject)
-  const isLoading = useEditorStore((s) => s.isLoading)
-  const gameConfig = useEditorStore((s) => s.gameConfig)
-  const setGameConfig = useEditorStore((s) => s.setGameConfig)
-  const setSelectedEntityId = useEditorStore((s) => s.setSelectedEntityId)
-  const history = useEditorStore((s) => s.history)
-  const historyIndex = useEditorStore((s) => s.historyIndex)
-  const undo = useEditorStore((s) => s.undo)
-  const redo = useEditorStore((s) => s.redo)
+  const { projectId } = useParams();
+  const setCurrentProject = useEditorStore((s) => s.setCurrentProject);
+  const currentProject = useEditorStore((s) => s.currentProject);
+  const isLoading = useEditorStore((s) => s.isLoading);
+  const gameConfig = useEditorStore((s) => s.gameConfig);
+  const setGameConfig = useEditorStore((s) => s.setGameConfig);
+  const setSelectedEntityId = useEditorStore((s) => s.setSelectedEntityId);
+  const history = useEditorStore((s) => s.history);
+  const historyIndex = useEditorStore((s) => s.historyIndex);
+  const undo = useEditorStore((s) => s.undo);
+  const redo = useEditorStore((s) => s.redo);
 
-  const [isRenamingProject, setIsRenamingProject] = useState(false)
-  const [renameDraft, setRenameDraft] = useState('')
-  const [isRenamingSaving, setIsRenamingSaving] = useState(false)
-  const renameInputRef = useRef<HTMLInputElement>(null)
-  const skipRenameBlurCommit = useRef(false)
+  const [isRenamingProject, setIsRenamingProject] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [isRenamingSaving, setIsRenamingSaving] = useState(false);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const skipRenameBlurCommit = useRef(false);
 
   const displayProjectName =
     currentProject?.name?.trim() ||
-    (projectId && projectId.length > 10 ? `${projectId.slice(0, 8)}…` : projectId) ||
-    'Dự án'
+    (projectId && projectId.length > 10
+      ? `${projectId.slice(0, 8)}…`
+      : projectId) ||
+    "Dự án";
 
   useEffect(() => {
     if (isRenamingProject) {
-      renameInputRef.current?.focus()
-      renameInputRef.current?.select()
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
     }
-  }, [isRenamingProject])
+  }, [isRenamingProject]);
 
   useEffect(() => {
     if (projectId) {
-      setCurrentProject({ id: projectId })
+      setCurrentProject({ id: projectId });
     }
-  }, [projectId, setCurrentProject])
+  }, [projectId, setCurrentProject]);
 
-  const [isFetchingProject, setIsFetchingProject] = useState(false)
-  const [isSavingProject, setIsSavingProject] = useState(false)
+  const [isFetchingProject, setIsFetchingProject] = useState(false);
+  const [isSavingProject, setIsSavingProject] = useState(false);
 
   // Auto-load gameConfig khi vào trang Studio.
   useEffect(() => {
     async function load() {
-      if (!projectId) return
-      setIsFetchingProject(true)
+      if (!projectId) return;
+      setIsFetchingProject(true);
       try {
-        const project = await fetchProjectById(projectId)
+        const project = await fetchProjectById(projectId);
         setCurrentProject({
           id: projectId,
           name: project.name?.trim() || undefined,
           description: project.description,
-        })
+        });
         if (project.gameConfig != null) {
-          setGameConfig(normalizeGameConfigForEditor(project.gameConfig))
-          setSelectedEntityId(null)
+          setGameConfig(normalizeGameConfigForEditor(project.gameConfig));
+          setSelectedEntityId(null);
         }
       } catch (e) {
-        toast.error('Không tải được dự án. Vui lòng thử lại.')
+        toast.error("Không tải được dự án. Vui lòng thử lại.");
       } finally {
-        setIsFetchingProject(false)
+        setIsFetchingProject(false);
       }
     }
 
-    void load()
-  }, [projectId, setCurrentProject, setGameConfig, setSelectedEntityId])
+    void load();
+  }, [projectId, setCurrentProject, setGameConfig, setSelectedEntityId]);
 
   async function commitProjectRename() {
-    if (!projectId) return
-    const next = renameDraft.trim()
+    if (!projectId) return;
+    const next = renameDraft.trim();
     if (!next) {
-      setIsRenamingProject(false)
-      return
+      setIsRenamingProject(false);
+      return;
     }
-    if (next === (currentProject?.name?.trim() || '')) {
-      setIsRenamingProject(false)
-      return
+    if (next === (currentProject?.name?.trim() || "")) {
+      setIsRenamingProject(false);
+      return;
     }
-    setIsRenamingSaving(true)
+    setIsRenamingSaving(true);
     try {
-      const updated = await patchProjectPartial(projectId, { name: next })
+      const updated = await patchProjectPartial(projectId, { name: next });
       setCurrentProject({
         id: projectId,
         name: updated.name,
         description: updated.description,
-      })
-      setIsRenamingProject(false)
-      toast.success('Đã đổi tên dự án.')
+      });
+      setIsRenamingProject(false);
+      toast.success("Đã đổi tên dự án.");
     } catch {
-      toast.error('Không lưu được tên. Thử lại.')
+      toast.error("Không lưu được tên. Thử lại.");
     } finally {
-      setIsRenamingSaving(false)
+      setIsRenamingSaving(false);
     }
   }
 
   function onRenameKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      void commitProjectRename()
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      skipRenameBlurCommit.current = true
-      setIsRenamingProject(false)
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void commitProjectRename();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      skipRenameBlurCommit.current = true;
+      setIsRenamingProject(false);
     }
   }
 
   function onRenameBlur() {
     if (skipRenameBlurCommit.current) {
-      skipRenameBlurCommit.current = false
-      return
+      skipRenameBlurCommit.current = false;
+      return;
     }
-    void commitProjectRename()
+    void commitProjectRename();
   }
 
   async function onSaveProject() {
     if (!projectId) {
-      toast.error('Thiếu projectId trên URL.')
-      return
+      toast.error("Thiếu projectId trên URL.");
+      return;
     }
-    setIsSavingProject(true)
+    setIsSavingProject(true);
     try {
-      await patchProjectGameConfig(projectId, gameConfig)
-      toast.success('Đã lưu thành công!')
+      await patchProjectGameConfig(projectId, gameConfig);
+      toast.success("Đã lưu thành công!");
     } catch (e) {
       // API server sẽ trả {success:false, message}, axios interceptors sẽ giúp hiển thị thông tin phù hợp.
-      toast.error('Lưu thất bại. Vui lòng thử lại.')
+      toast.error("Lưu thất bại. Vui lòng thử lại.");
     } finally {
-      setIsSavingProject(false)
+      setIsSavingProject(false);
     }
   }
 
-  const [leftOpen, setLeftOpen] = useState(true)
-  const [rightOpen, setRightOpen] = useState(true)
-  const [canvasMode, setCanvasMode] = useState<'preview' | 'play'>('preview')
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
+  const [canvasMode, setCanvasMode] = useState<"preview" | "play">("preview");
 
   // Ctrl+Z / Ctrl+Y (Cmd trên macOS): undo / redo — không áp dụng khi focus trong input.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (!(e.ctrlKey || e.metaKey)) return
-      const t = e.target as HTMLElement | null
-      if (t?.closest?.('input, textarea, select, [contenteditable="true"]')) return
-      const key = e.key.toLowerCase()
-      if (key === 'z') {
-        e.preventDefault()
-        useEditorStore.getState().undo()
-      } else if (key === 'y') {
-        e.preventDefault()
-        useEditorStore.getState().redo()
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.('input, textarea, select, [contenteditable="true"]'))
+        return;
+      const key = e.key.toLowerCase();
+      if (key === "z") {
+        e.preventDefault();
+        useEditorStore.getState().undo();
+      } else if (key === "y") {
+        e.preventDefault();
+        useEditorStore.getState().redo();
       }
     }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Delete / Backspace: xóa vật thể đang chọn (không áp dụng khi đang gõ trong input).
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== 'Delete' && e.key !== 'Backspace') return
-      const t = e.target as HTMLElement | null
-      if (!t) return
-      if (t.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      if (t.closest('input, textarea, select, [contenteditable="true"]'))
+        return;
 
-      const { selectedEntityId: sid, gameConfig: gc, removeEntity: rm } =
-        useEditorStore.getState()
-      if (!sid) return
+      const {
+        selectedEntityId: sid,
+        gameConfig: gc,
+        removeEntity: rm,
+      } = useEditorStore.getState();
+      if (!sid) return;
 
-      e.preventDefault()
-      const ent = gc.entities.find((x) => x.id === sid)
-      const name = ent?.id ?? sid
-      if (!confirmEntityDelete(name)) return
-      rm(sid)
-      toast.success('Đã xóa vật thể.')
+      e.preventDefault();
+      const ent = gc.entities.find((x) => x.id === sid);
+      const name = ent?.id ?? sid;
+      if (!confirmEntityDelete(name)) return;
+      rm(sid);
+      toast.success("Đã xóa vật thể.");
     }
 
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
-  const leftWidth = leftOpen ? 300 : 52
-  const rightWidth = rightOpen ? 250 : 52
+  const leftWidth = leftOpen ? 300 : 52;
+  const rightWidth = rightOpen ? 250 : 52;
 
-  const entityCount = Array.isArray(gameConfig.entities) ? gameConfig.entities.length : 0
-  const showCanvasEmptyState = entityCount === 0
+  const entityCount = Array.isArray(gameConfig.entities)
+    ? gameConfig.entities.length
+    : 0;
+  const showCanvasEmptyState = entityCount === 0;
 
   return (
     <div className="flex h-screen min-h-0 flex-col bg-bg-alice-blue">
@@ -233,7 +247,10 @@ export function EditorPage() {
             />
             <span className="hidden sm:inline">Dashboard</span>
           </Link>
-          <span className="hidden h-8 w-px shrink-0 bg-gradient-to-b from-transparent via-white/70 to-transparent sm:block" aria-hidden />
+          <span
+            className="hidden h-8 w-px shrink-0 bg-gradient-to-b from-transparent via-white/70 to-transparent sm:block"
+            aria-hidden
+          />
           <div className="min-w-0 flex-1">
             {isRenamingProject ? (
               <input
@@ -250,8 +267,10 @@ export function EditorPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setRenameDraft(currentProject?.name?.trim() || displayProjectName)
-                  setIsRenamingProject(true)
+                  setRenameDraft(
+                    currentProject?.name?.trim() || displayProjectName,
+                  );
+                  setIsRenamingProject(true);
                 }}
                 className="group flex max-w-full min-w-0 items-center gap-2 rounded-xl px-1.5 py-1 text-left transition hover:bg-white/50"
                 title="Nhấn để đổi tên"
@@ -277,28 +296,28 @@ export function EditorPage() {
             <button
               type="button"
               className={cn(
-                'relative rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition md:px-5 md:text-[0.7rem]',
-                canvasMode === 'preview'
-                  ? 'bg-gradient-to-b from-sky-light/95 to-sky-light/70 text-sky-dark shadow-md ring-1 ring-sky-dark/20'
-                  : 'text-slate-500 hover:bg-white/45 hover:text-slate-700',
+                "relative rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition md:px-5 md:text-[0.7rem]",
+                canvasMode === "preview"
+                  ? "bg-gradient-to-b from-sky-light/95 to-sky-light/70 text-sky-dark shadow-md ring-1 ring-sky-dark/20"
+                  : "text-slate-500 hover:bg-white/45 hover:text-slate-700",
               )}
-              aria-pressed={canvasMode === 'preview'}
-              onClick={() => setCanvasMode('preview')}
+              aria-pressed={canvasMode === "preview"}
+              onClick={() => setCanvasMode("preview")}
             >
               Preview
             </button>
             <button
               type="button"
               className={cn(
-                'relative rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition md:px-5 md:text-[0.7rem]',
-                canvasMode === 'play'
-                  ? 'bg-gradient-to-b from-emerald-200/95 to-emerald-100/80 text-emerald-900 shadow-md ring-1 ring-emerald-500/35'
-                  : 'text-slate-500 hover:bg-white/45 hover:text-slate-700',
+                "relative rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wide transition md:px-5 md:text-[0.7rem]",
+                canvasMode === "play"
+                  ? "bg-gradient-to-b from-emerald-200/95 to-emerald-100/80 text-emerald-900 shadow-md ring-1 ring-emerald-500/35"
+                  : "text-slate-500 hover:bg-white/45 hover:text-slate-700",
               )}
-              aria-pressed={canvasMode === 'play'}
+              aria-pressed={canvasMode === "play"}
               onClick={() => {
-                setSelectedEntityId(null)
-                setCanvasMode('play')
+                setSelectedEntityId(null);
+                setCanvasMode("play");
               }}
             >
               Play
@@ -314,9 +333,9 @@ export function EditorPage() {
             disabled={historyIndex <= 0}
             onClick={() => undo()}
             className={cn(
-              'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/60 bg-white/55 text-sky-dark shadow-sm backdrop-blur-sm transition',
-              'hover:bg-white/85 disabled:pointer-events-none disabled:opacity-40',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-dark/30',
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/60 bg-white/55 text-sky-dark shadow-sm backdrop-blur-sm transition",
+              "hover:bg-white/85 disabled:pointer-events-none disabled:opacity-40",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-dark/30",
             )}
           >
             <Undo2 className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -328,9 +347,9 @@ export function EditorPage() {
             disabled={historyIndex >= history.length - 1}
             onClick={() => redo()}
             className={cn(
-              'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/60 bg-white/55 text-sky-dark shadow-sm backdrop-blur-sm transition',
-              'hover:bg-white/85 disabled:pointer-events-none disabled:opacity-40',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-dark/30',
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/60 bg-white/55 text-sky-dark shadow-sm backdrop-blur-sm transition",
+              "hover:bg-white/85 disabled:pointer-events-none disabled:opacity-40",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-dark/30",
             )}
           >
             <Redo2 className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -371,8 +390,8 @@ export function EditorPage() {
           <div className="flex h-full min-h-0 flex-col">
             <div
               className={cn(
-                'flex shrink-0 items-center border-b border-white/40 py-2.5',
-                leftOpen ? 'justify-between px-3' : 'flex-col gap-3 px-1.5',
+                "flex shrink-0 items-center border-b border-white/40 py-2.5",
+                leftOpen ? "justify-between px-3" : "flex-col gap-3 px-1.5",
               )}
             >
               {leftOpen ? (
@@ -394,7 +413,11 @@ export function EditorPage() {
                   title="AI Chat — mở bảng trò chuyện"
                   aria-label="Mở AI Chat"
                 >
-                  <MessageSquare className="h-5 w-5" strokeWidth={2} aria-hidden />
+                  <MessageSquare
+                    className="h-5 w-5"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
                 </button>
               )}
               <button
@@ -402,10 +425,14 @@ export function EditorPage() {
                 onClick={() => setLeftOpen((v) => !v)}
                 className="rounded-lg p-1.5 text-sky-dark transition hover:bg-white/40"
                 aria-expanded={leftOpen}
-                title={leftOpen ? 'Thu gọn bảng AI' : 'Mở rộng bảng AI'}
-                aria-label={leftOpen ? 'Thu gọn chat' : 'Mở chat'}
+                title={leftOpen ? "Thu gọn bảng AI" : "Mở rộng bảng AI"}
+                aria-label={leftOpen ? "Thu gọn chat" : "Mở chat"}
               >
-                {leftOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
+                {leftOpen ? (
+                  <PanelLeftClose className="h-5 w-5" />
+                ) : (
+                  <PanelLeftOpen className="h-5 w-5" />
+                )}
               </button>
             </div>
 
@@ -432,23 +459,23 @@ export function EditorPage() {
             className="pointer-events-none absolute inset-0 opacity-[0.55]"
             style={{
               backgroundImage:
-                'radial-gradient(circle at center, rgba(148, 163, 184, 0.2) 1.25px, transparent 1.25px)',
-              backgroundSize: '20px 20px',
+                "radial-gradient(circle at center, rgba(148, 163, 184, 0.2) 1.25px, transparent 1.25px)",
+              backgroundSize: "20px 20px",
             }}
             aria-hidden
           />
           <div className="relative flex min-h-0 flex-1 items-center justify-center p-4 md:p-7">
             <div
               className={cn(
-                'relative aspect-video w-full max-w-4xl overflow-hidden rounded-[1.35rem] bg-white/90',
-                'shadow-[0_22px_50px_-12px_rgba(15,23,42,0.2),0_0_0_1px_rgba(255,255,255,0.65)]',
-                'ring-1 ring-slate-900/[0.06]',
-                canvasMode === 'play' &&
-                  'shadow-[0_24px_56px_-14px_rgba(16,185,129,0.35),0_0_0_1px_rgba(167,243,208,0.5),0_0_48px_-6px_rgba(52,211,153,0.35)] ring-emerald-400/45',
-                isLoading && 'animate-pulse',
+                "relative aspect-video w-full max-w-4xl overflow-hidden rounded-[1.35rem] bg-white/90",
+                "shadow-[0_22px_50px_-12px_rgba(15,23,42,0.2),0_0_0_1px_rgba(255,255,255,0.65)]",
+                "ring-1 ring-slate-900/[0.06]",
+                canvasMode === "play" &&
+                  "shadow-[0_24px_56px_-14px_rgba(16,185,129,0.35),0_0_0_1px_rgba(167,243,208,0.5),0_0_48px_-6px_rgba(52,211,153,0.35)] ring-emerald-400/45",
+                isLoading && "animate-pulse",
               )}
             >
-              {canvasMode === 'preview' ? (
+              {canvasMode === "preview" ? (
                 <GameCanvas className="h-full min-h-[180px] rounded-[1.35rem] border border-slate-200/80" />
               ) : (
                 <GameRuntime className="h-full min-h-[180px] rounded-[1.35rem] border border-emerald-200/60" />
@@ -459,7 +486,11 @@ export function EditorPage() {
                   aria-hidden
                 >
                   <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-light/90 to-sky-dark/20 text-sky-dark shadow-lg ring-2 ring-white/80">
-                    <Sparkles className="h-10 w-10" strokeWidth={1.75} aria-hidden />
+                    <Sparkles
+                      className="h-10 w-10"
+                      strokeWidth={1.75}
+                      aria-hidden
+                    />
                   </div>
                   <p className="max-w-xs font-display text-base font-semibold leading-snug text-slate-700 md:text-lg">
                     Nhắn AI bên trái để tạo game đầu tiên
@@ -480,8 +511,8 @@ export function EditorPage() {
           <div className="flex h-full min-h-0 flex-col">
             <div
               className={cn(
-                'flex shrink-0 items-center border-b border-white/40 py-2.5',
-                rightOpen ? 'justify-between px-3' : 'flex-col gap-3 px-1.5',
+                "flex shrink-0 items-center border-b border-white/40 py-2.5",
+                rightOpen ? "justify-between px-3" : "flex-col gap-3 px-1.5",
               )}
             >
               {rightOpen ? (
@@ -509,10 +540,14 @@ export function EditorPage() {
                 onClick={() => setRightOpen((v) => !v)}
                 className="rounded-lg p-1.5 text-sky-dark transition hover:bg-white/40"
                 aria-expanded={rightOpen}
-                title={rightOpen ? 'Thu gọn Layers' : 'Mở rộng Layers'}
-                aria-label={rightOpen ? 'Thu gọn inspector' : 'Mở inspector'}
+                title={rightOpen ? "Thu gọn Layers" : "Mở rộng Layers"}
+                aria-label={rightOpen ? "Thu gọn inspector" : "Mở inspector"}
               >
-                {rightOpen ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
+                {rightOpen ? (
+                  <PanelRightClose className="h-5 w-5" />
+                ) : (
+                  <PanelRightOpen className="h-5 w-5" />
+                )}
               </button>
             </div>
 
@@ -534,5 +569,5 @@ export function EditorPage() {
         </motion.aside>
       </div>
     </div>
-  )
+  );
 }

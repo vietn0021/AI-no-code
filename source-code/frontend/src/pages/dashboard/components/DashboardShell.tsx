@@ -1,13 +1,17 @@
-import type { PropsWithChildren } from 'react'
-import { DashboardHeader } from './DashboardHeader'
-import { DashboardSidebar } from './DashboardSidebar'
+import type { PropsWithChildren } from "react";
+import { DashboardHeader } from "./DashboardHeader";
+import { DashboardSidebar } from "./DashboardSidebar";
 
 type DashboardShellProps = PropsWithChildren<{
-  searchQuery: string
-  onSearchChange: (value: string) => void
-}>
+  searchQuery: string;
+  onSearchChange: (value: string) => void;
+}>;
 
-export function DashboardShell({ children, searchQuery, onSearchChange }: DashboardShellProps) {
+export function DashboardShell({
+  children,
+  searchQuery,
+  onSearchChange,
+}: DashboardShellProps) {
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-bg-alice-blue font-sans">
       <div
@@ -23,13 +27,18 @@ export function DashboardShell({ children, searchQuery, onSearchChange }: Dashbo
       />
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[linear-gradient(180deg,rgba(255,255,255,0.4)_0%,transparent_35%,transparent_65%,rgba(240,248,255,0.9)_100%)]" />
 
-      <DashboardHeader searchQuery={searchQuery} onSearchChange={onSearchChange} />
+      <DashboardHeader
+        searchQuery={searchQuery}
+        onSearchChange={onSearchChange}
+      />
 
       <div className="mx-auto flex max-w-[1400px]">
         <DashboardSidebar />
 
-        <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
+        <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">
+          {children}
+        </main>
       </div>
     </div>
-  )
+  );
 }
