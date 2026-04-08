@@ -17,10 +17,20 @@ Tài liệu này mô tả kiến trúc **full stack** hiện tại: `source-code
 ### Frontend
 
 - React 19 + Vite + TypeScript
-- Routing: `react-router-dom` (`AppRoutes`, `PrivateRoute`)
+- Routing: `react-router-dom` (`AppRoutes`, `PrivateRoute`) + **route công khai** `/play/:slug` → `PlayPage.tsx` (không JWT)
 - Auth: `AuthProvider` + `localStorage` key `access_token`
-- Studio state: Zustand `useEditorStore` (`gameConfig`, entities, `addEntity` / `updateEntity` / `removeEntity`)
+- Studio state: Zustand `useEditorStore` (`gameConfig`, entities, `addEntity` / `updateEntity` / `removeEntity`, **`isPublished`**, **`publishSlug`**, `setPublishState`)
+- **Publish UI:** `services/publish.api.ts` + header `EditorPage` (Publish / Unpublish / modal chia sẻ)
+- **Play công khai:** `services/play.api.ts` (`GET /api/projects/play/:slug`) + `GameRuntime` nhận tùy chọn prop **`gameConfig`** (không đụng store editor)
+- **Assets panel:** 3 tab — *Ảnh của bạn* | *Thư viện* (sprite Kenney qua Supabase public — `lib/spriteLibrary.ts`) | *Mẫu có sẵn*; kéo thả MIME `application/x-studio-asset`
+- Deploy SPA: `source-code/frontend/vercel.json` rewrite → `index.html`
 - UI: Tailwind, Framer Motion, `react-hot-toast`
+
+### Publish / play (backend tóm tắt)
+
+- `Project` có **`isPublished`**, **`publishedAt`**, **`slug`** (unique sparse); publish tạo slug `slugify(name) + '-' + randomBytes(4).hex` nếu chưa có
+- **`ProjectsPlayController`:** `GET /projects/play/:slug` — không guard; trả `{ gameConfig, name }` nếu đã publish
+- **`POST .../publish` / `POST .../unpublish`:** JWT + owner; `publishUrl` dựa trên env **`FRONTEND_URL`**
 
 ---
 
@@ -46,7 +56,7 @@ Hệ thống đang theo mô hình module-based + layered:
 | ----------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | `AuthModule`            | Đăng ký/đăng nhập/profile + JWT strategy              | `AuthController`, `AuthService`, `JwtStrategy`, `JwtAuthGuard`                     |
 | `UsersModule`           | Quản lý user model/service nền cho auth               | `UserSchema`, `UsersService`, `UsersController`                                    |
-| `ProjectsModule`        | Nghiệp vụ project + generate + rollback + versioning  | `ProjectsController`, `ProjectsService`, `ProjectsRepository`, `ProjectOwnerGuard` |
+| `ProjectsModule`        | Nghiệp vụ project + generate + rollback + versioning + **publish/play public** | `ProjectsController`, **`ProjectsPlayController`** (public `GET play/:slug`), `ProjectsService`, `ProjectsRepository`, `ProjectOwnerGuard` |
 | `ProjectVersionsModule` | API tạo snapshot trực tiếp                            | `ProjectVersionsController`, `ProjectVersionsService`                              |
 | `AssetsModule`          | Lưu metadata asset                                    | `AssetsController`, `AssetsService`                                                |
 | `PromptsModule`         | Lịch sử chat AI theo project (`user` / `assistant`)   | `PromptsController`, `PromptsService`, `Prompt` schema collection `prompts`        |
@@ -63,6 +73,76 @@ flowchart TD
   R --> M
   M --> DB[(MongoDB Atlas)]
 ```
+
+### 1.4 Sơ đồ chức năng (functional map)
+
+Sơ đồ dưới tóm tắt **khối năng lực** và luồng chính (không thay thế sequence diagram chi tiết ở mục 3).
+
+```mermaid
+flowchart TB
+  subgraph user["Người dùng"]
+    U1[Khách / chưa đăng nhập]
+    U2[User đã đăng nhập]
+  end
+
+  subgraph fe["Frontend (Vite + React)"]
+    PUB["/play/:slug — PlayPage"]
+    AUTH["Auth: login / register / reset"]
+    DASH["Dashboard — danh sách project"]
+    STU["Studio — EditorPage"]
+    subgraph stu_inner["Trong Studio"]
+      CHAT["AI Chat → generate"]
+      CAN["Preview + kéo asset"]
+      RUN["Play — GameRuntime"]
+      AST["Assets: Ảnh bạn | Thư viện Kenney | Mẫu"]
+      PSH["Publish / Unpublish + modal link"]
+    end
+  end
+
+  subgraph api["API NestJS /api"]
+    JWT["JWT + Owner guard"]
+    PRJ["Projects CRUD + versions + rollback"]
+    GEN["POST generate — AI Engine"]
+    PLS["POST publish / unpublish"]
+    GPL["GET projects/play/:slug — public"]
+    AENG["AiEngine — Groq / Gemini"]
+    ASTAPI["Assets upload — JWT"]
+  end
+
+  subgraph data["Persistence"]
+    DB[(MongoDB)]
+  end
+
+  U1 --> PUB
+  PUB --> GPL
+  GPL --> DB
+
+  U2 --> AUTH
+  U2 --> DASH
+  U2 --> STU
+  STU --> stu_inner
+  CHAT --> GEN
+  GEN --> AENG
+  CAN --> JWT
+  PSH --> PLS
+  STU --> PRJ
+  PRJ --> JWT
+  AST --> CAN
+  AST --> ASTAPI
+  PRJ --> DB
+  PLS --> DB
+  GEN --> DB
+  ASTAPI --> DB
+```
+
+**Ghi chú nhanh**
+
+| Khối | Ý nghĩa |
+|------|--------|
+| **Play công khai** | Chỉ đọc config đã publish theo `slug`; không token. |
+| **Studio** | Toàn bộ sửa `gameConfig`, AI, sprite, lưu PATCH project — cần JWT + owner khi đụng `:id`. |
+| **Publish** | Bật `isPublished`, gán `slug` + `publishedAt`; `unpublish` chỉ tắt cờ (slug có thể giữ). |
+| **Thư viện sprite** | CDN Supabase public; drag cùng MIME với mẫu Studio (`application/x-studio-asset`). |
 
 ---
 
@@ -102,8 +182,12 @@ flowchart TD
 | GET    | `/projects/:id`          | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.findOne()`      |
 | GET    | `/projects/:id/versions` | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.listVersions()` |
 | PATCH  | `/projects/:id`          | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.update()`       |
+| DELETE | `/projects/:id`          | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.remove()`       |
 | POST   | `/projects/:id/generate` | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.generate()`     |
 | POST   | `/projects/:id/rollback` | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.rollback()`     |
+| POST   | `/projects/:id/publish`   | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.publish()` → `{ slug, publishUrl }` |
+| POST   | `/projects/:id/unpublish` | `JwtAuthGuard`, `ProjectOwnerGuard` | `ProjectsController.unpublish()` → `{ success: true }` |
+| GET    | `/projects/play/:slug`    | **None** (public)                   | `ProjectsPlayController.playBySlug()` → `{ gameConfig, name }` |
 
 ### 2.5 AI Engine APIs
 
@@ -341,6 +425,9 @@ erDiagram
     number currentVersion
     string status
     string rawPrompt
+    boolean isPublished
+    date publishedAt
+    string slug
     date createdAt
     date updatedAt
   }
@@ -414,20 +501,23 @@ Ngay cả khi model trả sai format:
 ### 7.1 Route & layout
 
 - **Studio:** `/studio/:projectId` → `EditorPage.tsx` (bảo vệ `PrivateRoute`).
+- **Play công khai:** `/play/:slug` → `pages/play/PlayPage.tsx` (**không** `PrivateRoute`); fetch `GET /api/projects/play/:slug`, header gọn + `GameRuntime` với prop `gameConfig`.
 - Layout 3 cột: **AI Chat** (trái, thu/phóng), **Preview / Play** (giữa — toggle), **Layers | Assets + Inspector** (phải).
-- File chính: `EditorPage.tsx`, `GameCanvas.tsx`, **`GameRuntime.tsx`** (Phaser Play), `EditorRightColumn.tsx`, `AiChatPanel.tsx`, `LayersPanel.tsx`, `InspectorPanel.tsx`, `AssetsPanel.tsx`.
+- Header Studio: **Publish / Published / Unpublish** + modal chia sẻ (`publish.api.ts`, `useEditorStore.isPublished` / `publishSlug`).
+- File chính: `EditorPage.tsx`, `GameCanvas.tsx`, **`GameRuntime.tsx`** (Phaser Play — có thể nhận `gameConfig` từ props), `EditorRightColumn.tsx`, `AiChatPanel.tsx`, `LayersPanel.tsx`, `InspectorPanel.tsx`, `AssetsPanel.tsx`, **`PlayPage.tsx`**.
 
 ### 7.2 `gameConfig` & entity trên client
 
 - Store: `useEditorStore.ts` — `EditorGameConfig` gồm `entities`, `theme`, `logic`, `assets?`.
 - **`GameEntity`:** `id`, `type`, `shapeType` (`Square` | `Circle` | `Triangle`), `colorHex`/`color`, `position` (%), `width`/`height` (px), `settings?`, **`assetUrl?`** (khi `type === 'sprite'`).
 - **Sprite / ảnh thật:** entity `type: 'sprite'` + `assetUrl` → `GameCanvas` render **`<img>`** trong khung tuyệt đối, **`object-fit: contain`**, kéo thả vị trí giống entity hình học.
-- **Thư viện mẫu:** tab **Assets** — `studioSampleAssets.ts` (`STUDIO_SAMPLE_ASSETS`, MIME kéo `application/x-studio-asset`). Kéo thả vào Preview → `addEntity` với `settings.studioLabel` (hiển thị trên Layers).
+- **Assets — 3 tab:** *Ảnh của bạn* (upload + API), *Thư viện* (`lib/spriteLibrary.ts` — Kenney / Supabase public, search, lazy + skeleton), *Mẫu có sẵn* — `studioSampleAssets.ts` (`STUDIO_SAMPLE_ASSETS`). MIME kéo **`application/x-studio-asset`**. Kéo thả vào Preview → `addEntity` (có thể có `settings.studioLabel` — hiển thị trên Layers).
 
 ### 7.3 API Studio dùng từ frontend
 
-- `GET/ PATCH /api/projects/:id`, `POST .../generate`, `GET .../versions`, `POST .../rollback` — Bearer JWT + owner guard (khớp `projects.controller.ts`).
-- Client: `services/projects.api.ts`, `services/auth.api.ts`.
+- `GET/ PATCH /api/projects/:id`, `POST .../generate`, `GET .../versions`, `POST .../rollback`, `POST .../publish`, `POST .../unpublish` — Bearer JWT + owner guard (khớp `projects.controller.ts`).
+- **Public:** `GET /api/projects/play/:slug` — không Bearer.
+- Client: `services/projects.api.ts` (project có `isPublished`, `slug` khi map), **`services/publish.api.ts`**, **`services/play.api.ts`**, `services/auth.api.ts`.
 
 ### 7.4 AI Chat — ngữ cảnh scene
 
@@ -438,7 +528,7 @@ Ngay cả khi model trả sai format:
 
 ### 7.5 Chế độ Play (Phaser) — `GameRuntime.tsx`
 
-- Toggle **Preview / Play**: Preview = `GameCanvas`; Play = **`GameRuntime`** (Phaser 3 Arcade).
+- Toggle **Preview / Play**: Preview = `GameCanvas`; Play = **`GameRuntime`** (Phaser 3 Arcade). **`PlayPage`** truyền `gameConfig` qua prop để không ghi đè `useEditorStore`.
 - **Routing scene:**
   1. `templateId` thuộc tập template runtime → scene template tương ứng (`buildSnakeScene`, …).
   2. Không template và `gameConfigUsesBehaviors(gameConfig)` (ít nhất một entity có `behaviors` không rỗng) → **`BehaviorRuntime.tsx`** — scene key `studioBehavior` (`buildBehaviorScene`): groups, colliders, `rules`, UI score/lives/timer, `executeAction`.
@@ -450,8 +540,8 @@ Ngay cả khi model trả sai format:
 
 ## 8) Architectural Notes / Gaps (Thực trạng hiện tại)
 
-1. **Tài liệu vs code đã đổi**
-   - Docs cũ có thể đề cập `username/role`; user hiện tại: `email`, `password`, `fullName` (+ trường reset password trên schema).
+1. **Tài liệu vs code**
+   - User schema: `email`, `password`, `fullName` (+ reset password). Project có **`isPublished` / `slug` / `publishedAt`** và API publish/play public — xem mục **1.4**, **2.4**, **5.2**.
 2. **Create Project**
    - `POST /api/projects` **đã** bảo vệ `JwtAuthGuard`; `userId` lấy từ `@CurrentUser() user.sub`, body **không** gửi `userId` (xem `CreateProjectDto`).
 3. **Route nội bộ đã bảo vệ JWT**
@@ -477,7 +567,9 @@ Ngay cả khi model trả sai format:
 
 ### Frontend
 
-- Entry / routes: `source-code/frontend/src/App.tsx`, `routes/AppRoutes.tsx`, `routes/PrivateRoute.tsx`
+- Entry / routes: `source-code/frontend/src/App.tsx`, `routes/AppRoutes.tsx`, `routes/PrivateRoute.tsx` (route `/play/:slug` ngoài `PrivateRoute`)
+- Play công khai: `pages/play/PlayPage.tsx`, `vercel.json` (SPA rewrite)
+- Sprite thư viện: `lib/spriteLibrary.ts`
 - Auth UI: `pages/auth/*`, `contexts/AuthProvider.tsx`
 - Dashboard: `pages/dashboard/*`
 - Studio: `pages/studio/*` (gồm `components/GameRuntime.tsx`, `components/BehaviorRuntime.tsx`, `AiChatPanel.tsx`), `store/useEditorStore.ts`, `pages/studio/lib/entityView.ts`, `pages/studio/lib/studioSampleAssets.ts`

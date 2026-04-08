@@ -2,7 +2,7 @@
 
 ## 1) Mục tiêu
 
-**Studio Editor** là màn hình chính để người dùng nhập prompt AI, xem **preview game** theo `gameConfig` (JSON), chỉnh sửa/inspect thực thể, **thư viện asset mẫu (kéo vào canvas)** và **lưu / tải dự án** (đồng bộ backend + versioning khi generate/rollback).
+**Studio Editor** là màn hình chính để người dùng nhập prompt AI, xem **preview game** theo `gameConfig` (JSON), chỉnh sửa/inspect thực thể, **upload ảnh + thư viện sprite (Kenney) + mẫu có sẵn (kéo vào canvas)**, **publish** link chơi công khai, và **lưu / tải dự án** (đồng bộ backend + versioning khi generate/rollback).
 
 Giao diện đồng bộ tông **Sky Blue + White + Glassmorphism** với Dashboard.
 
@@ -43,8 +43,20 @@ Giao diện đồng bộ tông **Sky Blue + White + Glassmorphism** với Dashbo
 
 - `EditorRightColumn.tsx`:
   - Tab **Layers** → `LayersPanel.tsx`: danh sách entity (đảo thứ tự render), chọn / xóa (confirm), thumbnail sprite nếu có `assetUrl`.
-  - Tab **Assets** → `AssetsPanel.tsx`: danh sách mẫu từ `lib/studioSampleAssets.ts` (Player, Enemy, Tree, Coin, … — hiện dùng **SVG data URL** cố định, không phụ thuộc CDN). Mỗi mục `draggable`.
+  - Tab **Assets** → `AssetsPanel.tsx`: **3 tab con** — *Ảnh của bạn* (upload + `fetchProjectAssets`), *Thư viện* (sprite **Kenney** — URL Supabase public, `lib/spriteLibrary.ts`, lọc tên, `loading="lazy"` + skeleton), *Mẫu có sẵn* (`studioSampleAssets.ts`, SVG data URL). Mỗi ô kéo được; MIME **`application/x-studio-asset`** (`STUDIO_ASSET_DRAG_MIME`), payload JSON `{ assetUrl, label }`.
 - **Inspector:** `InspectorPanel.tsx` — vị trí %, kích thước px (commit blur / Enter), color picker + HEX hai chiều, palette Asset Module, nút xóa (Trash + `window.confirm`); meta theme khi chưa chọn entity.
+
+### 2.5 Header Studio — Publish
+
+- `EditorPage.tsx`: nút **Publish** / badge **Published** / **Unpublish**, toast + modal chia sẻ link.
+- API: `services/publish.api.ts` (`POST .../publish`, `POST .../unpublish`).
+- Store: `useEditorStore` — `isPublished`, `publishSlug`, `setPublishState` (đồng bộ khi `GET /projects/:id`).
+
+### 2.6 Trang chơi công khai (không login)
+
+- Route **`/play/:slug`** (`AppRoutes.tsx`, **ngoài** `PrivateRoute`) → `pages/play/PlayPage.tsx`.
+- `services/play.api.ts`: `GET /api/projects/play/:slug` → `gameConfig` + `name`; `GameRuntime` nhận **`gameConfig` qua prop** (không dùng store editor).
+- SEO: cập nhật `document.title` / meta description trên client.
 
 ---
 
@@ -77,8 +89,12 @@ Giao diện đồng bộ tông **Sky Blue + White + Glassmorphism** với Dashbo
 
 ### 4.2 Load & lưu dự án
 
-- **GET** `/api/projects/:id` khi vào `/studio/:projectId`.
+- **GET** `/api/projects/:id` khi vào `/studio/:projectId` (response map kèm `isPublished`, `slug` cho UI publish).
 - **PATCH** `/api/projects/:id` để lưu thay đổi (tên, mô tả, `gameConfig`, …) — có snapshot phía backend nếu `gameConfig` đổi.
+
+### 4.2b Publish (tuỳ chọn)
+
+- **POST** `/api/projects/:id/publish`, **POST** `.../unpublish` — Bearer + owner; xem `docs/02-backend/project-module/readme.md`.
 
 ### 4.3 Versions & rollback
 
@@ -92,8 +108,9 @@ Giao diện đồng bộ tông **Sky Blue + White + Glassmorphism** với Dashbo
 
 ## 5) Route & bảo vệ
 
-- **Route:** `/studio/:projectId` (`AppRoutes.tsx`, trong `PrivateRoute`).
-- Backend: JWT + `ProjectOwnerGuard` cho thao tác theo `:id`.
+- **Route Studio:** `/studio/:projectId` (`AppRoutes.tsx`, trong `PrivateRoute`).
+- **Route play công khai:** `/play/:slug` — **không** `PrivateRoute`.
+- Backend: JWT + `ProjectOwnerGuard` cho thao tác theo `:id`; `GET /projects/play/:slug` không auth.
 
 ---
 
@@ -118,8 +135,24 @@ source-code/frontend/src/pages/studio/
 ```
 
 ```txt
+source-code/frontend/src/pages/play/
+  PlayPage.tsx             # /play/:slug — public, GameRuntime + prop gameConfig
+```
+
+```txt
+source-code/frontend/src/lib/
+  spriteLibrary.ts         # SPRITE_CATEGORIES / Kenney URLs (Supabase public)
+```
+
+```txt
 source-code/frontend/src/store/
-  useEditorStore.ts        # GameEntity, EditorGameConfig, addEntity, …
+  useEditorStore.ts        # GameEntity, EditorGameConfig, addEntity, isPublished, publishSlug, …
+```
+
+```txt
+source-code/frontend/src/services/
+  publish.api.ts
+  play.api.ts
 ```
 
 ---
@@ -130,7 +163,9 @@ source-code/frontend/src/store/
 |----------|-------------------|
 | Layout | 3 cột: Chat · Preview · (Layers \| Assets) + Inspector |
 | Canvas | Hình học (div) + **sprite (`<img>` + object-contain)** |
-| Assets | Tab Assets, kéo thả vào Preview → `addEntity` |
+| Assets | Tab Assets (**Ảnh bạn | Thư viện Kenney | Mẫu**), kéo thả → `addEntity` |
+| Publish | Header Editor + `publish.api.ts` + store `isPublished` / `publishSlug` |
+| Play public | `/play/:slug` — `PlayPage` + `play.api.ts` |
 | Store | Zustand `useEditorStore` |
 | AI | POST `/api/projects/:id/generate` + Bearer; prompt có context `gameConfig` (payload), UI chỉ hiện text user |
 | Play | Toggle Play → `GameRuntime` (template \| `BehaviorRuntime` \| legacy) |

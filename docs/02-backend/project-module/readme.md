@@ -16,6 +16,9 @@ Muc tieu cua `Project` la luu trang thai hien tai (latest) cua game ma user dang
   - So phien ban hien tai cua project. Mac dinh `1`.
 - `userId: ObjectId`  
   - Ref toi `User`, required, index de lay danh sach project theo user nhanh.
+- `isPublished: boolean` (default `false`, index) — cho phep `GET /projects/play/:slug`.
+- `publishedAt?: Date`
+- `slug?: string` (trim, unique sparse index) — URL play; sinh khi publish neu chua co.
 
 ### Goi y schema (Nest + Mongoose)
 
@@ -131,6 +134,24 @@ Duoi day la bo endpoint toi thieu cho `Project Module`.
 - `GET /api/projects/:id/versions`
 - Ket qua:
   - Danh sach cac snapshot, sap xep moi nhat truoc.
+
+### 4.7 Publish / Unpublish (chia sẻ game)
+
+- `POST /api/projects/:id/publish` — `JwtAuthGuard` + `ProjectOwnerGuard`
+  - Đặt `isPublished = true`, `publishedAt = now`
+  - Nếu chưa có `slug`: tạo `slugify(name) + '-' + randomBytes(4).toString('hex')` (tránh trùng unique, có retry)
+  - Response: `{ slug, publishUrl }` (`publishUrl` dùng env **`FRONTEND_URL`** + `/play/{slug}`)
+- `POST /api/projects/:id/unpublish` — cùng guard
+  - Đặt `isPublished = false`
+  - Response: `{ success: true }`
+
+### 4.8 Play công khai (không JWT)
+
+- `GET /api/projects/play/:slug` — **không** guard
+  - Tìm project theo `slug`; nếu không tồn tại hoặc `isPublished !== true` → 404
+  - Response: `{ gameConfig, name }` (không lộ dữ liệu owner / rawPrompt)
+
+**Schema:** thêm `isPublished`, `publishedAt`, `slug` trên `Project` — xem `docs/01-system-design/database-schema.md`.
 
 ---
 

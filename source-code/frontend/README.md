@@ -1,11 +1,13 @@
 # AI No-code Studio — Frontend
 
-React 19 + Vite + TypeScript. App chính: auth, dashboard, **Studio** (`/studio/:projectId`).
+React 19 + Vite + TypeScript. App chính: auth, dashboard, **Studio** (`/studio/:projectId`), **play công khai** (`/play/:slug`).
 
 ## Studio (tóm tắt)
 
+- **Publish:** header `EditorPage` + `services/publish.api.ts`; store `isPublished` / `publishSlug`.
+- **Assets:** `AssetsPanel` — tab *Ảnh của bạn* | *Thư viện* (`lib/spriteLibrary.ts`) | *Mẫu có sẵn*.
 - **Preview:** `GameCanvas` — entity hình học + sprite (`assetUrl`).
-- **Play:** `GameRuntime` — Phaser 3:
+- **Play (Studio):** `GameRuntime` — Phaser 3:
   - **Template** (`templateId`: snake, flappy, …) → scene tương ứng.
   - **Behavior** — không template, entity có `behaviors[]` → `BehaviorRuntime.tsx` (`studioBehavior`).
   - **Legacy** — không behaviors → scene đơn giản (`studioRuntime`).
@@ -23,6 +25,8 @@ npm run preview
 ```
 
 Proxy API: cấu hình trong `vite.config.ts` (thường `/api` → backend).
+
+**Deploy Vercel:** `vercel.json` rewrite SPA về `index.html` để `/play/*` hoạt động.
 
 ---
 

@@ -1,8 +1,10 @@
 # AI No-code Game Studio
 
-Ứng dụng **studio tạo game không cần code**: người dùng đăng ký/đăng nhập, quản lý dự án, chỉnh **game config** (JSON) qua **AI (Groq hoặc Gemini)** và **editor trực quan** (preview / play Phaser, layers, asset mẫu, sprite), có **versioning / rollback** phía backend.
+Ứng dụng **studio tạo game không cần code**: người dùng đăng ký/đăng nhập, quản lý dự án, chỉnh **game config** (JSON) qua **AI (Groq hoặc Gemini)** và **editor trực quan** (preview / play Phaser, layers, upload ảnh, **thư viện sprite Kenney**, mẫu có sẵn), có **versioning / rollback** phía backend.
 
-**Play mode:** ngoài các game **template** (Snake, Flappy, …), Studio hỗ trợ **behavior runtime** — entity có `behaviors[]` (move, jump, patrol, rules, …) khi không đặt `templateId`; scene Phaser đơn giản (legacy) vẫn dùng khi chưa có behaviors. Chi tiết: `docs/03-frontend/studio-editor/behavior-runtime.md`, `SYSTEM_ARCHITECTURE.md` mục Play.
+**Publish & chơi công khai:** owner có thể **publish** project → link `/play/{slug}` (SPA; frontend deploy Vercel dùng `source-code/frontend/vercel.json` rewrite). API public: `GET /api/projects/play/:slug` (không JWT). Backend dùng **`FRONTEND_URL`** để dựng `publishUrl`.
+
+**Play mode (Studio):** ngoài các game **template** (Snake, Flappy, …), Studio hỗ trợ **behavior runtime** — entity có `behaviors[]` khi không đặt `templateId`; scene legacy khi chưa có behaviors. Chi tiết: `docs/03-frontend/studio-editor/behavior-runtime.md`, `SYSTEM_ARCHITECTURE.md` (mục Play + **1.4 sơ đồ chức năng**).
 
 ---
 
@@ -68,7 +70,7 @@ npm run dev
 - App: `http://localhost:5173`
 - Vite proxy `/api` → backend (theo cấu hình `vite.config.ts`)
 
-Đăng ký / đăng nhập → Dashboard → mở project tại **`/studio/:projectId`**.
+Đăng ký / đăng nhập → Dashboard → mở project tại **`/studio/:projectId`**. Sau **Publish**, mở **`/play/<slug>`** (có thể thử ở cửa sổ ẩn danh — không cần login).
 
 ---
 
@@ -80,7 +82,8 @@ Xem đầy đủ trong `source-code/backend/.env.example`:
 - `JWT_SECRET`, `JWT_EXPIRES_IN`
 - `GROQ_API_KEY`, `GROQ_MODEL` (tùy chọn — ưu tiên khi có key)
 - `GEMINI_API_KEY` (bắt buộc khi **không** dùng Groq cho generate; cần cho `GET /ai/models`)
-- Tùy chọn reset mật khẩu: `FRONTEND_URL`, `PASSWORD_RESET_EXPIRES_MIN`, `PASSWORD_RESET_LOG_LINK`
+- `FRONTEND_URL` — link reset mật khẩu **và** `publishUrl` khi gọi `POST /projects/:id/publish`
+- Tùy chọn: `PASSWORD_RESET_EXPIRES_MIN`, `PASSWORD_RESET_LOG_LINK`
 
 ---
 

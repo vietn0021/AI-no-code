@@ -30,10 +30,13 @@ Hệ thống sử dụng MongoDB làm cơ sở dữ liệu chính, **Mongoose OD
 - `rawPrompt`: String (optional)
 - `gameConfig`: Mixed (`Record<string, unknown>`, optional) — JSON game / editor
 - `currentVersion`: Number (default `1`)
-- `status`: Enum `draft` | `published` | `archived` (default `draft`, index)
+- `status`: Enum `draft` | `published` | `archived` (default `draft`, index) — *workflow trạng thái dự án* (khác với cờ **`isPublished`** chia sẻ link play)
+- `isPublished`: Boolean (default `false`, index) — game có thể chơi qua `GET /api/projects/play/:slug`
+- `publishedAt`: Date (optional)
+- `slug`: String (optional, trim, **unique sparse** index) — URL thân thiện; sinh khi publish (`slugify(name)` + suffix hex)
 - `createdAt` / `updatedAt`: timestamps
 
-**Index:** `{ userId: 1, status: 1 }`, `{ userId: 1, createdAt: -1 }`
+**Index:** `{ userId: 1, status: 1 }`, `{ userId: 1, createdAt: -1 }`, `{ slug: 1 }` unique sparse
 
 **File:** `modules/projects/schemas/project.schema.ts`
 
@@ -91,7 +94,7 @@ Hệ thống sử dụng MongoDB làm cơ sở dữ liệu chính, **Mongoose OD
 ## 3. Indexing Strategy
 
 - **User:** unique + index trên `email`.
-- **Project:** compound `{ userId, status }`, `{ userId, createdAt }`.
+- **Project:** compound `{ userId, status }`, `{ userId, createdAt }`; **unique sparse** trên `slug` (play URL).
 - **ProjectVersion:** `{ projectId, version }` để lấy lịch sử / rollback.
 - **Asset:** index `projectId` để liệt kê asset theo dự án.
 - **Prompt:** compound `{ projectId, userId, createdAt }` để tải lịch sử chat theo thứ tự.
